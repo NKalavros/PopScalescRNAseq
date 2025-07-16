@@ -41,7 +41,7 @@ mamba run --prefix "$FULL_ENV_PATH" pip install Pillow==9.5.0
 
 # Install MindSpore GPU for CUDA 11.6
 echo "Installing MindSpore GPU for CUDA 11.6..."
-mamba run --prefix "$FULL_ENV_PATH" pip install mindspore-gpu==1.10.0 -f https://ms-release.obs.cn-north-4.myhuaweicloud.com/1.10.0/MindSpore/gpu/x86_64/cuda-11.6/
+mamba run --prefix "$FULL_ENV_PATH" pip install mindspore==2.2.14 -f https://ms-release.obs.cn-north-4.myhuaweicloud.com/2.2.14/MindSpore/unified/x86_64/
 
 # Install single-cell analysis packages (exact versions from CellFM requirements)
 echo "Installing single-cell packages..."
