@@ -23,19 +23,13 @@ def generate_geneformer_embeddings(adata, model_dir=None):
     """Generate embeddings using Geneformer"""
     print("Generating Geneformer embeddings...")
     
-    # Set model directory (Geneformer repository location)
-    if model_dir is None:
-        model_dir = "/gpfs/scratch/nk4167/miniconda/envs/geneformer_env/Geneformer"
-    
     try:
-        print(f"Loading Geneformer from {model_dir}")
-        
         # Import Geneformer modules
         import geneformer
         from transformers import AutoModel, AutoConfig
         
-        # Load Geneformer model from Hugging Face (uses cached version)
-        print("Loading Geneformer model from Hugging Face cache...")
+        # Load Geneformer model from Hugging Face (downloads if needed, uses cache if available)
+        print("Loading Geneformer model from Hugging Face...")
         model = AutoModel.from_pretrained('ctheodoris/Geneformer')
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         model = model.to(device)
