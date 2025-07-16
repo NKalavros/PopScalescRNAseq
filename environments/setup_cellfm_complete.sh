@@ -20,29 +20,28 @@ fi
 echo "Creating CellFM environment with Python 3.9..."
 mamba create --prefix "$FULL_ENV_PATH" python=3.9 pip git -y
 
-# Activate environment
-echo "Activating environment..."
-mamba activate "$FULL_ENV_PATH"
+# Use conda run to execute commands in the environment (this works without shell activation)
+echo "Installing packages in CellFM environment..."
 
 # Install PyTorch with CUDA 12.1 (optional dependency but recommended)
 echo "Installing PyTorch with CUDA 12.1..."
-pip install torch==2.1.0+cu121 torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+mamba run --prefix "$FULL_ENV_PATH" pip install torch==2.1.0+cu121 torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
 
 # Install core scientific packages (compatible versions for Python 3.9)
 echo "Installing core scientific packages..."
-pip install numpy==1.24.3 pandas==1.5.3 scipy==1.9.3 matplotlib==3.5.3
+mamba run --prefix "$FULL_ENV_PATH" pip install numpy==1.24.3 pandas==1.5.3 scipy==1.9.3 matplotlib==3.5.3
 
 # Install MindSpore (CellFM's main requirement)
 echo "Installing MindSpore..."
-pip install mindspore==2.2.10
+mamba run --prefix "$FULL_ENV_PATH" pip install mindspore==2.2.10
 
 # Install single-cell analysis packages (exact versions from CellFM requirements)
 echo "Installing single-cell packages..."
-pip install scanpy==1.10 scib==1.1.5 anndata==0.8.0
+mamba run --prefix "$FULL_ENV_PATH" pip install scanpy==1.10 scib==1.1.5 anndata==0.8.0
 
 # Install additional dependencies
 echo "Installing additional dependencies..."
-pip install transformers datasets accelerate
+mamba run --prefix "$FULL_ENV_PATH" pip install transformers datasets accelerate
 
 # Clone CellFM repository
 echo "Cloning CellFM repository..."
@@ -52,11 +51,11 @@ cd CellFM
 
 # Install CellFM package
 echo "Installing CellFM package..."
-pip install -e .
+mamba run --prefix "$FULL_ENV_PATH" pip install -e .
 
 # Test the installation
 echo "Testing installation..."
-python -c "
+mamba run --prefix "$FULL_ENV_PATH" python -c "
 import torch
 print(f'✅ PyTorch: {torch.__version__}, CUDA: {torch.cuda.is_available()}')
 
