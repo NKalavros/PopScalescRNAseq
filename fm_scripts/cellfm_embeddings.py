@@ -27,6 +27,14 @@ def generate_cellfm_embeddings(adata, model_dir=None):
     if model_dir is None:
         model_dir = "/gpfs/scratch/nk4167/miniconda/envs/CellFM/CellFM"
     
+    # Set CUDA environment variables for MindSpore GPU
+    env_prefix = "/gpfs/scratch/nk4167/miniconda/envs/CellFM"
+    current_ld_path = os.environ.get('LD_LIBRARY_PATH', '')
+    os.environ['LD_LIBRARY_PATH'] = f"{env_prefix}/lib:{current_ld_path}"
+    os.environ['CUDA_HOME'] = env_prefix
+    os.environ['CUDA_ROOT'] = env_prefix
+    print(f"🔧 Set CUDA environment variables for MindSpore GPU")
+    
     try:
         # Add CellFM to Python path
         sys.path.insert(0, model_dir)

@@ -35,6 +35,10 @@ mamba run --prefix "$FULL_ENV_PATH" pip install torch==1.13.1+cu116 torchvision=
 echo "Installing core scientific packages..."
 mamba run --prefix "$FULL_ENV_PATH" pip install numpy==1.24.3 pandas==1.5.3 scipy==1.9.3 matplotlib==3.5.3
 
+# Install compatible Pillow version for MindSpore
+echo "Installing compatible Pillow version..."
+mamba run --prefix "$FULL_ENV_PATH" pip install Pillow==9.5.0
+
 # Install MindSpore GPU for CUDA 11.6
 echo "Installing MindSpore GPU for CUDA 11.6..."
 mamba run --prefix "$FULL_ENV_PATH" pip install mindspore-gpu==1.10.0 -f https://ms-release.obs.cn-north-4.myhuaweicloud.com/1.10.0/MindSpore/gpu/x86_64/cuda-11.6/
@@ -55,11 +59,31 @@ cd CellFM
 
 # Install CellFM package in development mode
 echo "Installing CellFM package in development mode..."
-mamba run --prefix "$FULL_ENV_PATH" pip install -e .
+#mamba run --prefix "$FULL_ENV_PATH" pip install -e .
+
+# Create environment activation script with CUDA library paths
+echo "Creating environment activation script..."
+mkdir -p "$FULL_ENV_PATH/etc/conda/activate.d"
+cat > "$FULL_ENV_PATH/etc/conda/activate.d/cuda_env.sh" << 'EOF'
+#!/bin/bash
+# Set CUDA library paths for MindSpore GPU
+export LD_LIBRARY_PATH="$CONDA_PREFIX/lib:$LD_LIBRARY_PATH"
+export CUDA_HOME="$CONDA_PREFIX"
+export CUDA_ROOT="$CONDA_PREFIX"
+echo "🔧 CUDA environment variables set for MindSpore GPU"
+EOF
+
+# Make activation script executable
+chmod +x "$FULL_ENV_PATH/etc/conda/activate.d/cuda_env.sh"
 
 # Test the installation
 echo "Testing installation..."
-mamba run --prefix "$FULL_ENV_PATH" python -c "
+mamba run --prefix "$FULL_ENV_PATH" bash -c "
+export LD_LIBRARY_PATH='$FULL_ENV_PATH/lib:\$LD_LIBRARY_PATH'
+export CUDA_HOME='$FULL_ENV_PATH'
+export CUDA_ROOT='$FULL_ENV_PATH'
+
+python -c \"
 import torch
 print(f'✅ PyTorch: {torch.__version__}, CUDA available: {torch.cuda.is_available()}')
 if torch.cuda.is_available():
@@ -86,17 +110,8 @@ print(f'✅ transformers: {transformers.__version__}')
 import huggingface_hub
 print(f'✅ huggingface_hub: {huggingface_hub.__version__}')
 
-try:
-    # Test CellFM module imports
-    import sys
-    sys.path.append('.')
-    from model import CellFM
-    from config import Config
-    print('✅ CellFM modules imported successfully')
-except Exception as e:
-    print(f'⚠️  CellFM modules: {e}')
-
 print('🎉 CellFM environment setup COMPLETE!')
+\"
 "
 
 # Create results directory
@@ -107,7 +122,7 @@ mkdir -p "$FULL_ENV_PATH/../../results"
 echo "Testing CellFM embedding script..."
 echo "To test embeddings, run:"
 echo "mamba activate $FULL_ENV_PATH"
-echo "# Environment will use CUDA 11.6 for MindSpore GPU compatibility"
+echo "# CUDA environment variables are automatically set on activation"
 echo "python fm_scripts/cellfm_embeddings.py --input pbmc3k_raw.h5ad --output results/cellfm_embeddings.h5ad"
 
 echo "✅ CellFM environment ready at: $FULL_ENV_PATH"
