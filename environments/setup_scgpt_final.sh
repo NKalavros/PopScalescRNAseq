@@ -16,9 +16,9 @@ if [ -d "$FULL_ENV_PATH" ]; then
     mamba env remove --prefix "$FULL_ENV_PATH" -y || true
 fi
 
-# Create environment from YAML
+# Create environment from YAML with correct prefix
 echo "Creating environment from YAML..."
-mamba env create -f environments/scgpt_env.yml
+mamba env create -f environments/scgpt_env.yml --prefix "$FULL_ENV_PATH"
 
 # Activate environment
 echo "Activating environment..."
