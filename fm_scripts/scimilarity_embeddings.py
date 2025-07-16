@@ -39,22 +39,29 @@ def generate_scimilarity_embeddings(adata, model_dir=None):
         # Prepare data for scimilarity
         print("Preparing data for scimilarity...")
         
-        # Step 1: Align gene space to model's gene order
+        # Step 1: Ensure raw counts are in the right place
+        print("Preparing raw counts...")
+        if 'counts' not in adata.layers:
+            # If no counts layer, assume X contains raw counts
+            adata.layers['counts'] = adata.X.copy()
+            print("Added raw counts to layers['counts']")
+        
+        # Step 2: Align gene space to model's gene order
         print("Aligning dataset to model gene order...")
         adata_aligned = align_dataset(adata, cell_embedding.gene_order)
         print(f"Aligned data shape: {adata_aligned.shape}")
         
-        # Step 2: Log normalize (transcripts per 10k)
+        # Step 3: Log normalize (transcripts per 10k)
         print("Log normalizing counts...")
         adata_normalized = lognorm_counts(adata_aligned)
         print("Data normalization complete")
         
-        # Step 3: Get expression matrix for embedding
+        # Step 4: Get expression matrix for embedding
         X_for_embedding = adata_normalized.X
         print(f"Expression matrix shape: {X_for_embedding.shape}")
         print(f"Expression matrix type: {type(X_for_embedding)}")
         
-        # Step 4: Generate embeddings
+        # Step 5: Generate embeddings
         print("Computing embeddings with scimilarity...")
         embeddings = cell_embedding.get_embeddings(X_for_embedding)
         
