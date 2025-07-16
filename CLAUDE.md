@@ -122,12 +122,19 @@ Each foundation model uses isolated environments with specific dependency chains
 ### Key Implementation Files
 - **demo_scripts/scgpt_demo.py:712**: Complete training pipeline with hyperparameter defaults, data preprocessing, model training, and evaluation metrics using wandb
 - **environments/install_sgpt.sh**: 360-line automated installer with GPU detection and error handling
+- **fm_scripts/**: Foundation model embedding generation scripts using real pretrained models:
+  - `scimilarity_embeddings.py`: Uses real scimilarity model with 28k aligned genes
+  - `scfoundation_embeddings.py`: Uses scFoundation transformer architecture  
+  - `geneformer_embeddings.py`: Uses real Geneformer model from Hugging Face (ctheodoris/Geneformer)
+  - `cellfm_embeddings.py`: Uses real CellFM model from Hugging Face (ShangguanNingyuan/CellFM) with MindSpore framework
+  - `scgpt_embeddings_simple.py`: Simplified scGPT implementation for HPC compatibility
 - Environment scripts contain model-specific download procedures (SharePoint, Zenodo, Hugging Face, Google Drive)
 
 ### Model Download Strategies
 - **scFoundation**: Authenticated SharePoint downloads (models.ckpt, models1.ckpt)
 - **scimilarity**: Direct Zenodo download with tar extraction
 - **Geneformer**: Git LFS clone from Hugging Face repository
+- **CellFM**: Automatic download from Hugging Face (ShangguanNingyuan/CellFM) using huggingface_hub
 - **scGPT**: Google Drive downloads for macOS, package installation for Linux
 
 ### Data Processing Architecture  

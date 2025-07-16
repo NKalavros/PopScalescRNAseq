@@ -34,101 +34,102 @@ def generate_cellfm_embeddings(adata, model_dir=None):
         # Import CellFM modules
         print("Importing CellFM modules...")
         import mindspore as ms
-        from model import CellFM  # CellFM's main model class
-        from config import config  # CellFM's configuration
+        from model import CellFM
+        from config import Config
+        from scipy.sparse import csr_matrix as csr
+        import scanpy as sc
         
         print(f"✅ MindSpore: {ms.__version__}")
         print("✅ CellFM modules imported successfully")
         
-        # Set MindSpore context
+        # Set MindSpore context for GPU
         ms.set_context(mode=ms.GRAPH_MODE, device_target="GPU")
         
-        # Try to load pretrained model from Hugging Face
-        print("Loading CellFM model...")
+        # Download CellFM model from Hugging Face if not present
+        print("Setting up CellFM model...")
         
-        # For now, create a CellFM-style embedding using available components
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        print(f"Using device: {device}")
+        # Check for model checkpoint
+        checkpoint_path = os.path.join(model_dir, "base_weight.ckpt")
         
-        n_cells = adata.n_obs
+        if not os.path.exists(checkpoint_path):
+            print("Downloading CellFM model from Hugging Face...")
+            try:
+                from huggingface_hub import hf_hub_download
+                
+                # Download the model checkpoint
+                checkpoint_path = hf_hub_download(
+                    repo_id="ShangguanNingyuan/CellFM",
+                    filename="base_weight.ckpt",
+                    cache_dir=model_dir
+                )
+                print(f"✅ Model downloaded to: {checkpoint_path}")
+                
+            except Exception as download_error:
+                print(f"Failed to download model: {download_error}")
+                raise download_error
+        
+        # Preprocess data for CellFM
+        print("Preprocessing data for CellFM...")
+        
+        # Convert to sparse format as required by CellFM
+        if not hasattr(adata.X, 'toarray'):
+            adata.X = csr(adata.X)
+        
+        # Basic filtering (CellFM preprocessing)
+        sc.pp.filter_cells(adata, min_genes=1)
+        sc.pp.filter_genes(adata, min_cells=1)
+        
         n_genes = adata.n_vars
-        embedding_dim = 768  # CellFM typical embedding dimension
+        print(f"Data preprocessed: {adata.n_obs} cells, {n_genes} genes")
         
-        # Simulate CellFM-like processing (in real implementation, would use the actual model)
-        torch.manual_seed(42)  # For reproducibility
+        # Initialize CellFM model with proper configuration
+        print("Initializing CellFM model...")
+        cfg = Config()
+        cfg.enc_dims = 1536  # CellFM embedding dimensions
+        cfg.enc_nlayers = 40  # Number of encoder layers
+        cfg.enc_num_heads = 48  # Number of attention heads
         
-        # Convert data to tensor
+        # Create CellFM model
+        model = CellFM(n_genes, cfg)
+        
+        # Load pretrained weights
+        print(f"Loading pretrained weights from {checkpoint_path}...")
+        para = ms.load_checkpoint(checkpoint_path)
+        ms.load_param_into_net(model, para)
+        
+        # Set model to evaluation mode
+        model.set_train(False)
+        
+        # Convert data to MindSpore tensor format
+        print("Converting data to MindSpore format...")
         if hasattr(adata.X, 'toarray'):
-            X = torch.tensor(adata.X.toarray(), dtype=torch.float32, device=device)
+            X_data = adata.X.toarray()
         else:
-            X = torch.tensor(adata.X, dtype=torch.float32, device=device)
+            X_data = adata.X
         
-        # Create a CellFM-style architecture (simulating the actual model)
-        # CellFM uses retention-based architecture with attention mechanisms
-        encoder = torch.nn.Sequential(
-            torch.nn.Linear(n_genes, 1024),
-            torch.nn.LayerNorm(1024),
-            torch.nn.ReLU(),
-            torch.nn.Dropout(0.1),
-            torch.nn.Linear(1024, embedding_dim),
-            torch.nn.LayerNorm(embedding_dim),
-            torch.nn.ReLU(),
-        ).to(device)
+        # Convert to MindSpore tensor
+        X_tensor = ms.Tensor(X_data, dtype=ms.float32)
         
-        with torch.no_grad():
-            embeddings = encoder(X)
-            # Apply CellFM-style normalization
-            embeddings = torch.nn.functional.layer_norm(embeddings, embeddings.shape[1:])
-            
-            # Convert back to numpy
-            embeddings = embeddings.cpu().numpy()
+        # Generate embeddings using the real CellFM model
+        print("Generating embeddings with CellFM model...")
+        with ms.no_grad():
+            embeddings_tensor = model(X_tensor)
+            embeddings = embeddings_tensor.asnumpy()
         
-        print(f"Generated CellFM-style embeddings shape: {embeddings.shape}")
+        print(f"Generated real CellFM embeddings shape: {embeddings.shape}")
         return embeddings
         
     except Exception as e:
-        print(f"Error with CellFM model: {e}")
-        print("Falling back to simulated embeddings...")
+        print(f"Error with real CellFM model: {e}")
+        print("This indicates the CellFM model setup needs to be fixed.")
+        print("Please ensure:")
+        print("1. CellFM repository is properly cloned")
+        print("2. Model weights are downloaded from Hugging Face")
+        print("3. MindSpore is correctly installed with GPU support")
+        print("4. All CellFM dependencies are available")
         
-        # Fallback: Create simulated CellFM-style embeddings
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        print(f"Using device: {device}")
-        
-        n_cells = adata.n_obs
-        n_genes = adata.n_vars
-        embedding_dim = 768  # CellFM embedding dimension
-        
-        # Simulate CellFM-like processing
-        torch.manual_seed(42)  # For reproducibility
-        
-        # Convert data to tensor
-        if hasattr(adata.X, 'toarray'):
-            X = torch.tensor(adata.X.toarray(), dtype=torch.float32, device=device)
-        else:
-            X = torch.tensor(adata.X, dtype=torch.float32, device=device)
-        
-        # Create a retention-based architecture (simulating CellFM)
-        encoder = torch.nn.Sequential(
-            torch.nn.Linear(n_genes, 2048),
-            torch.nn.LayerNorm(2048),
-            torch.nn.GELU(),
-            torch.nn.Dropout(0.1),
-            torch.nn.Linear(2048, 1024),
-            torch.nn.LayerNorm(1024),
-            torch.nn.GELU(),
-            torch.nn.Linear(1024, embedding_dim)
-        ).to(device)
-        
-        with torch.no_grad():
-            embeddings = encoder(X)
-            # Apply normalization
-            embeddings = torch.nn.functional.normalize(embeddings, p=2, dim=1)
-            
-            # Convert back to numpy
-            embeddings = embeddings.cpu().numpy()
-        
-        print(f"Generated simulated CellFM-style embeddings shape: {embeddings.shape}")
-        return embeddings
+        # For now, indicate this is not working rather than fall back to simulation
+        raise Exception(f"CellFM real model failed: {e}. Please fix the setup before proceeding.")
 
 def main():
     parser = argparse.ArgumentParser(description='Generate CellFM embeddings')
@@ -139,8 +140,24 @@ def main():
     
     args = parser.parse_args()
     
+    print(f"🚀 Starting CellFM embedding generation...")
+    print(f"📥 Input: {args.input}")
+    print(f"📤 Output: {args.output}")
+    print(f"🏠 Model directory: {args.model_dir}")
+    
+    # Check if input file exists
+    if not os.path.exists(args.input):
+        raise FileNotFoundError(f"Input file not found: {args.input}")
+    
+    # Check if model directory exists
+    if not os.path.exists(args.model_dir):
+        raise FileNotFoundError(f"CellFM repository not found at: {args.model_dir}")
+        
     # Create output directory if needed
-    os.makedirs(os.path.dirname(args.output), exist_ok=True)
+    output_dir = os.path.dirname(args.output)
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
+        print(f"📁 Created output directory: {output_dir}")
     
     # Load data
     adata = load_data(args.input)
@@ -156,13 +173,15 @@ def main():
         "model": "CellFM",
         "embedding_dim": embeddings.shape[1],
         "model_dir": args.model_dir,
-        "device": "cuda" if torch.cuda.is_available() else "cpu"
+        "device": "cuda" if torch.cuda.is_available() else "cpu",
+        "model_source": "Hugging Face: ShangguanNingyuan/CellFM"
     }
     
     # Save result
-    print(f"Saving results to {args.output}")
+    print(f"💾 Saving results to {args.output}")
     adata.write_h5ad(args.output)
     print("✅ CellFM embedding generation complete!")
+    print(f"📊 Generated embeddings: {embeddings.shape[0]} cells × {embeddings.shape[1]} dimensions")
 
 if __name__ == "__main__":
     main()

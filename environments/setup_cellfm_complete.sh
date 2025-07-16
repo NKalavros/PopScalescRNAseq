@@ -41,7 +41,7 @@ mamba run --prefix "$FULL_ENV_PATH" pip install scanpy==1.10 scib==1.1.5 anndata
 
 # Install additional dependencies
 echo "Installing additional dependencies..."
-mamba run --prefix "$FULL_ENV_PATH" pip install transformers datasets accelerate
+mamba run --prefix "$FULL_ENV_PATH" pip install transformers datasets accelerate huggingface_hub
 
 # Clone CellFM repository
 echo "Cloning CellFM repository..."
@@ -49,8 +49,8 @@ cd "$FULL_ENV_PATH"
 git clone https://github.com/biomed-AI/CellFM.git
 cd CellFM
 
-# Install CellFM package
-echo "Installing CellFM package..."
+# Install CellFM package in development mode
+echo "Installing CellFM package in development mode..."
 mamba run --prefix "$FULL_ENV_PATH" pip install -e .
 
 # Test the installation
@@ -68,16 +68,31 @@ print('✅ scanpy imported successfully')
 import transformers
 print(f'✅ transformers: {transformers.__version__}')
 
+import huggingface_hub
+print(f'✅ huggingface_hub: {huggingface_hub.__version__}')
+
 try:
-    # Try to import CellFM modules (might not work without proper setup)
+    # Test CellFM module imports
     import sys
     sys.path.append('.')
-    print('✅ CellFM repository cloned and accessible')
+    from model import CellFM
+    from config import Config
+    print('✅ CellFM modules imported successfully')
 except Exception as e:
-    print(f'ℹ️  CellFM modules: {e} (this is normal for initial setup)')
+    print(f'⚠️  CellFM modules: {e}')
 
 print('🎉 CellFM environment setup COMPLETE!')
 "
+
+# Create results directory
+echo "Creating results directory..."
+mkdir -p "$FULL_ENV_PATH/../../results"
+
+# Test embedding script
+echo "Testing CellFM embedding script..."
+echo "To test embeddings, run:"
+echo "mamba activate $FULL_ENV_PATH"
+echo "python fm_scripts/cellfm_embeddings.py --input pbmc3k_raw.h5ad --output results/cellfm_embeddings.h5ad"
 
 echo "✅ CellFM environment ready at: $FULL_ENV_PATH"
 echo "To activate: mamba activate $FULL_ENV_PATH"
