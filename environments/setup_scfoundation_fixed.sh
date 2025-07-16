@@ -26,7 +26,7 @@ source activate "$FULL_ENV_PATH"
 
 # Install PyTorch with CUDA 12.1 (compatible with V100/A100)
 echo "Installing PyTorch with CUDA 12.1..."
-pip install torch==2.0.1+cu121 torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+pip install torch==2.1.0+cu121 torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
 
 # Install core scientific packages (compatible versions)
 echo "Installing core scientific packages..."
