@@ -20,9 +20,12 @@ fi
 echo "Creating minimal base environment..."
 mamba create --prefix "$FULL_ENV_PATH" python=3.10 pip git git-lfs -y
 
-# Activate environment
-echo "Activating environment..."
-source activate "$FULL_ENV_PATH"
+# Note: Activate environment manually with: mamba activate $FULL_ENV_PATH
+echo "Environment created. Please activate manually and continue..."
+echo "Commands to run:"
+echo "  mamba activate $FULL_ENV_PATH"
+echo "  [then run the pip install commands below]"
+echo ""
 
 # Install PyTorch with CUDA 12.1 (compatible with V100/A100)
 echo "Installing PyTorch with CUDA 12.1..."
