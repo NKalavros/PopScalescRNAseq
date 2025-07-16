@@ -31,12 +31,15 @@ mamba run --prefix "$FULL_ENV_PATH" pip install torch==2.1.0+cu121 torchvision t
 echo "Installing core scientific packages..."
 mamba run --prefix "$FULL_ENV_PATH" pip install numpy==1.24.3 pandas==1.5.3 scipy==1.9.3 matplotlib==3.5.3
 
-# Install MindSpore (CellFM's main requirement) - try GPU version first
-echo "Installing MindSpore..."
-echo "Trying GPU version first..."
-mamba run --prefix "$FULL_ENV_PATH" pip install mindspore-gpu==2.2.14 || {
-    echo "GPU version failed, installing CPU version..."
-    mamba run --prefix "$FULL_ENV_PATH" pip install mindspore==2.2.14
+# Install MindSpore GPU (CellFM's main requirement) 
+echo "Installing MindSpore GPU for CUDA 12..."
+echo "Trying CUDA 12.1 specific version..."
+mamba run --prefix "$FULL_ENV_PATH" pip install mindspore-gpu==1.10.0 -f https://ms-release.obs.cn-north-4.myhuaweicloud.com/1.10.0/MindSpore/gpu/x86_64/cuda-12.1/ || {
+    echo "CUDA 12.1 specific version failed, trying standard GPU version..."
+    mamba run --prefix "$FULL_ENV_PATH" pip install mindspore-gpu==1.10.0 || {
+        echo "GPU version failed, installing CPU version as fallback..."
+        mamba run --prefix "$FULL_ENV_PATH" pip install mindspore==2.2.14
+    }
 }
 
 # Install single-cell analysis packages (exact versions from CellFM requirements)

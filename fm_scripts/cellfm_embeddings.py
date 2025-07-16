@@ -119,8 +119,16 @@ def generate_cellfm_embeddings(adata, model_dir=None):
         
         # Generate embeddings using the real CellFM model
         print("Generating embeddings with CellFM model...")
-        with ms.no_grad():
+        try:
+            # MindSpore 1.x uses different context manager
+            model.set_train(False)
             embeddings_tensor = model(X_tensor)
+            embeddings = embeddings_tensor.asnumpy()
+        except Exception as inference_error:
+            print(f"Direct inference failed: {inference_error}")
+            print("Trying alternative inference method...")
+            # Alternative method for older MindSpore versions
+            embeddings_tensor = model.construct(X_tensor)
             embeddings = embeddings_tensor.asnumpy()
         
         print(f"Generated real CellFM embeddings shape: {embeddings.shape}")

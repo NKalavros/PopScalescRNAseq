@@ -10,11 +10,14 @@ echo "🚀 Setting up CellFM environment with real model support..."
 # Create environment
 mamba create --prefix "$FULL_ENV_PATH" python=3.9 pip git -y
 
-# Install core packages (try GPU MindSpore first)
-echo "Installing MindSpore..."
-mamba run --prefix "$FULL_ENV_PATH" pip install mindspore-gpu==2.2.10 || {
-    echo "GPU version failed, installing CPU version..."
-    mamba run --prefix "$FULL_ENV_PATH" pip install mindspore==2.2.10
+# Install MindSpore GPU for CUDA 12 with fallbacks
+echo "Installing MindSpore GPU for CUDA 12..."
+mamba run --prefix "$FULL_ENV_PATH" pip install mindspore-gpu==1.10.0 -f https://ms-release.obs.cn-north-4.myhuaweicloud.com/1.10.0/MindSpore/gpu/x86_64/cuda-12.1/ || {
+    echo "CUDA 12.1 version failed, trying standard GPU version..."
+    mamba run --prefix "$FULL_ENV_PATH" pip install mindspore-gpu==1.10.0 || {
+        echo "GPU version failed, installing CPU version..."
+        mamba run --prefix "$FULL_ENV_PATH" pip install mindspore==2.2.14
+    }
 }
 mamba run --prefix "$FULL_ENV_PATH" pip install scanpy==1.10 scib==1.1.5 anndata==0.8.0
 
@@ -22,7 +25,7 @@ mamba run --prefix "$FULL_ENV_PATH" pip install scanpy==1.10 scib==1.1.5 anndata
 mamba run --prefix "$FULL_ENV_PATH" pip install huggingface_hub transformers
 
 # Install PyTorch (optional, for compatibility)
-mamba run --prefix "$FULL_ENV_PATH" pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+mamba run --prefix "$FULL_ENV_PATH" pip install torch torchvision torchaudio hf_transfer --index-url https://download.pytorch.org/whl/cu121
 
 # Clone CellFM repository
 cd "$FULL_ENV_PATH"
