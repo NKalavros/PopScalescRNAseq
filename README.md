@@ -15,19 +15,19 @@ A collection of at least 5 studies from multiple disease conditions + healthy sa
 
 ## Conventional methods:
 
-Seurat Sketch 
-Symphony
-scVI
-scPoli
-CellHint (?)
+1. Seurat Sketch 
+2. Symphony
+3. scVI
+4. scPoli
+5. CellHint (?)
 
 ## scRNA-seq foundation model methods:
 
-scGPT
-scFoundation
-CellFM
-Geneformer
-CellFM (This is quite hard to implement)
+1. scGPT
+2. scFoundation
+3. CellFM
+4. Geneformer
+5. CellFM (This is quite hard to implement)
 
 ## Structure:
 
@@ -50,7 +50,7 @@ fm_scripts/
 Scripts that generate embeddings per study with foundation models, in a zero-shot fashion for now. Work on anndata objects.
 
 ```
-method_scripts
+method_scripts/
 ```
 
 Scripts that generate embeddings per study with conventional methods, with sensible defaults for now.

@@ -1,0 +1,53 @@
+prefix: /gpfs/scratch/nk4167/miniconda/envs/scgpt_env
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+  - bioconda
+  - r
+  - defaults
+dependencies:
+  # Core Python and system packages
+  - python=3.9
+  - pip
+  - git
+  - gcc_linux-64
+  - gxx_linux-64
+  
+  # R (required for some dependencies)
+  - r-base=4.2.2
+  - r-essentials
+  - r-devtools
+  - rpy2
+  
+  # PyTorch with CUDA 11.7
+  - pytorch=*=*cuda11.7*
+  - pytorch-cuda=11.7
+  - cudatoolkit=11.7
+  
+  # Scientific computing
+  - numpy
+  - scipy
+  - pandas
+  - matplotlib
+  - seaborn
+  - scikit-learn
+  
+  # Single-cell analysis
+  - scanpy
+  - anndata
+  - umap-learn
+  - leidenalg
+  - louvain
+  
+  # Jupyter
+  - jupyter
+  - ipykernel
+  - nb_conda_kernels
+  
+  # Pip packages
+  - pip:
+    - scgpt
+    - flash-attn<1.0.5
+    - wandb
+    - orbax==0.1.7

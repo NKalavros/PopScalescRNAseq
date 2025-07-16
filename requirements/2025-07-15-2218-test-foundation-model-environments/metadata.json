@@ -1,0 +1,13 @@
+{
+  "id": "test-foundation-model-environments",
+  "started": "2025-07-15T22:18:00Z",
+  "lastUpdated": "2025-07-15T22:25:00Z",
+  "status": "active",
+  "phase": "context",
+  "progress": {
+    "discovery": { "answered": 5, "total": 5 },
+    "detail": { "answered": 0, "total": 0 }
+  },
+  "contextFiles": [],
+  "relatedFeatures": []
+}
