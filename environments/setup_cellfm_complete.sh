@@ -27,9 +27,9 @@ echo "Installing packages in CellFM environment..."
 echo "Installing CUDA 11.6 toolkit for MindSpore GPU compatibility..."
 mamba run --prefix "$FULL_ENV_PATH" conda install cudatoolkit=11.6 cudnn=8.4.1 -c conda-forge -y
 
-# Install PyTorch with CUDA 11.6 (compatible with MindSpore)
+# Install PyTorch with CUDA 11.6 (latest available version)
 echo "Installing PyTorch with CUDA 11.6..."
-mamba run --prefix "$FULL_ENV_PATH" pip install torch==2.0.1+cu116 torchvision==0.15.2+cu116 torchaudio==2.0.2+cu116 --index-url https://download.pytorch.org/whl/cu116
+mamba run --prefix "$FULL_ENV_PATH" pip install torch==1.13.1+cu116 torchvision==0.14.1+cu116 torchaudio==0.13.1+cu116 --index-url https://download.pytorch.org/whl/cu116
 
 # Install core scientific packages (compatible versions for Python 3.9)
 echo "Installing core scientific packages..."

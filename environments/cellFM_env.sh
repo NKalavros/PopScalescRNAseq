@@ -24,8 +24,8 @@ mamba run --prefix "$FULL_ENV_PATH" pip install scanpy==1.10 scib==1.1.5 anndata
 # Install model download dependencies  
 mamba run --prefix "$FULL_ENV_PATH" pip install huggingface_hub transformers
 
-# Install PyTorch with CUDA 11.6 (compatible with MindSpore)
-mamba run --prefix "$FULL_ENV_PATH" pip install torch==2.0.1+cu116 torchvision==0.15.2+cu116 torchaudio==2.0.2+cu116 --index-url https://download.pytorch.org/whl/cu116
+# Install PyTorch with CUDA 11.6 (latest available version)
+mamba run --prefix "$FULL_ENV_PATH" pip install torch==1.13.1+cu116 torchvision==0.14.1+cu116 torchaudio==0.13.1+cu116 --index-url https://download.pytorch.org/whl/cu116
 
 # Clone CellFM repository
 cd "$FULL_ENV_PATH"
