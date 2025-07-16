@@ -38,7 +38,7 @@ pip install einops local_attention
 
 # Install single-cell packages (compatible versions)
 echo "Installing single-cell packages..."
-pip install anndata==0.8.0 scanpy==1.8.2
+pip install matplotlib==3.5.3 anndata==0.8.0 scanpy==1.8.2
 
 # Create models directory
 echo "Creating models directory..."
