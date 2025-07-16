@@ -1,13 +1,24 @@
 {
   "id": "test-foundation-model-environments",
   "started": "2025-07-15T22:18:00Z",
-  "lastUpdated": "2025-07-15T22:25:00Z",
+  "lastUpdated": "2025-07-15T22:30:00Z",
   "status": "active",
-  "phase": "context",
+  "phase": "detail",
   "progress": {
     "discovery": { "answered": 5, "total": 5 },
-    "detail": { "answered": 0, "total": 0 }
+    "detail": { "answered": 0, "total": 5 }
   },
-  "contextFiles": [],
-  "relatedFeatures": []
+  "contextFiles": [
+    "demo_scripts/scgpt_demo.py",
+    "environments/scgpt_env.yml",
+    "environments/scFoundation_env.sh",
+    "environments/scimilarity_env.sh",
+    "environments/geneformer_env.sh",
+    "environments/cellFM_env.sh"
+  ],
+  "relatedFeatures": [
+    "scGPT training pipeline",
+    "Environment setup automation",
+    "Model download procedures"
+  ]
 }
