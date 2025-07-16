@@ -102,6 +102,34 @@ def generate_cellfm_embeddings(adata, model_dir=None):
         n_genes = adata.n_vars
         print(f"Data preprocessed: {adata.n_obs} cells, {n_genes} genes")
         
+        # CellFM model expects exactly 24,080 genes - handle mismatch
+        expected_genes = 24080
+        print(f"Model expects {expected_genes} genes, data has {n_genes} genes")
+        
+        if n_genes != expected_genes:
+            print(f"Adjusting gene count from {n_genes} to {expected_genes}")
+            
+            # Get expression data
+            if hasattr(adata.X, 'toarray'):
+                X_data = adata.X.toarray()
+            else:
+                X_data = adata.X
+            
+            if n_genes < expected_genes:
+                # Pad with zeros if we have fewer genes
+                padding_size = expected_genes - n_genes
+                padding = np.zeros((X_data.shape[0], padding_size), dtype=X_data.dtype)
+                X_data = np.hstack([X_data, padding])
+                print(f"Padded with {padding_size} zero columns")
+            elif n_genes > expected_genes:
+                # Truncate if we have more genes (keep first genes)
+                X_data = X_data[:, :expected_genes]
+                print(f"Truncated to first {expected_genes} genes")
+            
+            # Update the data
+            adata.X = X_data
+            n_genes = expected_genes
+        
         # Initialize CellFM model with proper configuration
         print("Initializing CellFM model...")
         cfg = Config()
@@ -109,8 +137,8 @@ def generate_cellfm_embeddings(adata, model_dir=None):
         cfg.enc_nlayers = 40  # Number of encoder layers
         cfg.enc_num_heads = 48  # Number of attention heads
         
-        # Create CellFM model
-        model = CellFM(n_genes, cfg)
+        # Create CellFM model with expected gene count
+        model = CellFM(expected_genes, cfg)
         
         # Load pretrained weights
         print(f"Loading pretrained weights from {checkpoint_path}...")

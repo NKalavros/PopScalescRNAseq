@@ -25,7 +25,7 @@ echo "Installing packages in CellFM environment..."
 
 # Install CUDA 11.6 toolkit for MindSpore GPU compatibility  
 echo "Installing CUDA 11.6 toolkit for MindSpore GPU compatibility..."
-mamba run --prefix "$FULL_ENV_PATH" conda install cudatoolkit=11.6 cudnn=8.4.1 -c conda-forge -y
+mamba run --prefix "$FULL_ENV_PATH" conda install cudatoolkit=11.6 cudnn=8.4.1 cuda-nvcc==11.6.* -c nvidia -c conda-forge -y
 
 # Install PyTorch with CUDA 11.6 (latest available version)
 echo "Installing PyTorch with CUDA 11.6..."
@@ -41,8 +41,7 @@ mamba run --prefix "$FULL_ENV_PATH" pip install Pillow==9.5.0
 
 # Install MindSpore GPU for CUDA 11.6
 echo "Installing MindSpore GPU for CUDA 11.6..."
-mamba run --prefix "$FULL_ENV_PATH" pip install mindspore==2.2.14 -f https://ms-release.obs.cn-north-4.myhuaweicloud.com/2.2.14/MindSpore/unified/x86_64/
-
+wget https://ms-release.obs.cn-north-4.myhuaweicloud.com/2.2.14/MindSpore/unified/x86_64/mindspore-2.2.14-cp39-cp39-linux_x86_64.whl
 # Install single-cell analysis packages (exact versions from CellFM requirements)
 echo "Installing single-cell packages..."
 mamba run --prefix "$FULL_ENV_PATH" pip install scanpy==1.10 scib==1.1.5 anndata==0.8.0
@@ -50,6 +49,7 @@ mamba run --prefix "$FULL_ENV_PATH" pip install scanpy==1.10 scib==1.1.5 anndata
 # Install additional dependencies
 echo "Installing additional dependencies..."
 mamba run --prefix "$FULL_ENV_PATH" pip install transformers datasets accelerate huggingface_hub
+mamba run --prefix "$FULL_ENV_PATH" pip install mindspore-2.2.14-cp39-cp39-linux_x86_64.whl
 
 # Clone CellFM repository
 echo "Cloning CellFM repository..."
@@ -70,11 +70,15 @@ cat > "$FULL_ENV_PATH/etc/conda/activate.d/cuda_env.sh" << 'EOF'
 export LD_LIBRARY_PATH="$CONDA_PREFIX/lib:$LD_LIBRARY_PATH"
 export CUDA_HOME="$CONDA_PREFIX"
 export CUDA_ROOT="$CONDA_PREFIX"
+export PATH="$CONDA_PREFIX/bin:$PATH"
 echo "🔧 CUDA environment variables set for MindSpore GPU"
 EOF
 
 # Make activation script executable
 chmod +x "$FULL_ENV_PATH/etc/conda/activate.d/cuda_env.sh"
+
+
+mamba run --prefix "$FULL_ENV_PATH" pip install torch==1.13.1+cu116 torchvision==0.14.1+cu116 torchaudio==0.13.1+cu116 --index-url https://download.pytorch.org/whl/cu116
 
 # Test the installation
 echo "Testing installation..."
