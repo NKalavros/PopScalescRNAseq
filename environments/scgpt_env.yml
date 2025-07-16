@@ -36,11 +36,8 @@ dependencies:
   - ipykernel
   - nb_conda_kernels
   
-  # Pip packages (PyTorch 2.0.1 with CUDA 11.7 - tested working on BigPurple HPC)
+  # Pip packages (PyTorch installed separately due to index URL requirements)
   - pip:
-    - torch==2.0.1+cu117 --index-url https://download.pytorch.org/whl/cu117
-    - torchvision --index-url https://download.pytorch.org/whl/cu117
-    - torchaudio --index-url https://download.pytorch.org/whl/cu117
     - torchtext==0.15.2
     - numpy==1.24.3
     - pandas==1.5.3
