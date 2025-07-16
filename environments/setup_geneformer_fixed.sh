@@ -37,7 +37,7 @@ pip install numpy==1.24.3 pandas==1.5.3 scipy==1.9.3 matplotlib==3.5.3
 
 # Install machine learning packages
 echo "Installing ML packages..."
-pip install transformers datasets accelerate
+pip install transformers datasets accelerate hf_transfer
 
 # Install single-cell packages (compatible versions)
 echo "Installing single-cell packages..."

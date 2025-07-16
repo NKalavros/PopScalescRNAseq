@@ -32,19 +32,21 @@ def generate_geneformer_embeddings(adata, model_dir=None):
         
         # Import Geneformer modules
         import geneformer
-        from transformers import BertModel, BertConfig
+        from transformers import AutoModel, AutoConfig
         
-        # Check if we have access to Geneformer model files
-        model_path = os.path.join(model_dir, "geneformer-12L-30M")
-        if not os.path.exists(model_path):
-            print(f"⚠️  Geneformer model not found at {model_path}")
-            print("Note: Geneformer requires model files from Hugging Face")
+        # Check if we have the model files (model.safetensors should be in the Geneformer directory)
+        model_safetensors = os.path.join(model_dir, "model.safetensors")
+        config_file = os.path.join(model_dir, "config.json")
+        
+        if not (os.path.exists(model_safetensors) and os.path.exists(config_file)):
+            print(f"⚠️  Geneformer model files not found in {model_dir}")
+            print(f"Expected: {model_safetensors} and {config_file}")
             print("Falling back to simulated embeddings...")
             raise FileNotFoundError("Model files not found")
         
-        # Load Geneformer model
+        # Load Geneformer model from local directory
         print("Loading Geneformer model...")
-        model = BertModel.from_pretrained(model_path)
+        model = AutoModel.from_pretrained(model_dir, local_files_only=True)
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         model = model.to(device)
         model.eval()
