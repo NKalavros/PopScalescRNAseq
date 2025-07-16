@@ -31,9 +31,9 @@ mamba run --prefix "$FULL_ENV_PATH" pip install torch==2.1.0+cu121 torchvision t
 echo "Installing core scientific packages..."
 mamba run --prefix "$FULL_ENV_PATH" pip install numpy==1.24.3 pandas==1.5.3 scipy==1.9.3 matplotlib==3.5.3
 
-# Install MindSpore (CellFM's main requirement)
+# Install MindSpore (CellFM's main requirement) - use available version
 echo "Installing MindSpore..."
-mamba run --prefix "$FULL_ENV_PATH" pip install mindspore==2.2.10
+mamba run --prefix "$FULL_ENV_PATH" pip install mindspore==2.2.14
 
 # Install single-cell analysis packages (exact versions from CellFM requirements)
 echo "Installing single-cell packages..."
