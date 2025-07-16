@@ -23,24 +23,21 @@ mamba create --prefix "$FULL_ENV_PATH" python=3.9 pip git -y
 # Use conda run to execute commands in the environment (this works without shell activation)
 echo "Installing packages in CellFM environment..."
 
-# Install PyTorch with CUDA 12.1 (optional dependency but recommended)
-echo "Installing PyTorch with CUDA 12.1..."
-mamba run --prefix "$FULL_ENV_PATH" pip install torch==2.1.0+cu121 torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+# Install CUDA 11.6 toolkit for MindSpore GPU compatibility  
+echo "Installing CUDA 11.6 toolkit for MindSpore GPU compatibility..."
+mamba run --prefix "$FULL_ENV_PATH" conda install cudatoolkit=11.6 cudnn=8.4.1 -c conda-forge -y
+
+# Install PyTorch with CUDA 11.6 (compatible with MindSpore)
+echo "Installing PyTorch with CUDA 11.6..."
+mamba run --prefix "$FULL_ENV_PATH" pip install torch==2.0.1+cu116 torchvision==0.15.2+cu116 torchaudio==2.0.2+cu116 --index-url https://download.pytorch.org/whl/cu116
 
 # Install core scientific packages (compatible versions for Python 3.9)
 echo "Installing core scientific packages..."
 mamba run --prefix "$FULL_ENV_PATH" pip install numpy==1.24.3 pandas==1.5.3 scipy==1.9.3 matplotlib==3.5.3
 
-# Install MindSpore GPU (CellFM's main requirement) 
-echo "Installing MindSpore GPU for CUDA 12..."
-echo "Trying CUDA 12.1 specific version..."
-mamba run --prefix "$FULL_ENV_PATH" pip install mindspore-gpu==1.10.0 -f https://ms-release.obs.cn-north-4.myhuaweicloud.com/1.10.0/MindSpore/gpu/x86_64/cuda-12.1/ || {
-    echo "CUDA 12.1 specific version failed, trying standard GPU version..."
-    mamba run --prefix "$FULL_ENV_PATH" pip install mindspore-gpu==1.10.0 || {
-        echo "GPU version failed, installing CPU version as fallback..."
-        mamba run --prefix "$FULL_ENV_PATH" pip install mindspore==2.2.14
-    }
-}
+# Install MindSpore GPU for CUDA 11.6
+echo "Installing MindSpore GPU for CUDA 11.6..."
+mamba run --prefix "$FULL_ENV_PATH" pip install mindspore-gpu==1.10.0 -f https://ms-release.obs.cn-north-4.myhuaweicloud.com/1.10.0/MindSpore/gpu/x86_64/cuda-11.6/
 
 # Install single-cell analysis packages (exact versions from CellFM requirements)
 echo "Installing single-cell packages..."
@@ -64,10 +61,21 @@ mamba run --prefix "$FULL_ENV_PATH" pip install -e .
 echo "Testing installation..."
 mamba run --prefix "$FULL_ENV_PATH" python -c "
 import torch
-print(f'✅ PyTorch: {torch.__version__}, CUDA: {torch.cuda.is_available()}')
+print(f'✅ PyTorch: {torch.__version__}, CUDA available: {torch.cuda.is_available()}')
+if torch.cuda.is_available():
+    print(f'   CUDA version: {torch.version.cuda}')
+    print(f'   GPU device: {torch.cuda.get_device_name(0)}')
 
 import mindspore as ms
 print(f'✅ MindSpore: {ms.__version__}')
+
+# Test MindSpore GPU context
+try:
+    ms.set_context(mode=ms.GRAPH_MODE, device_target='GPU')
+    print('✅ MindSpore GPU context set successfully')
+    ms.set_context(device_target='CPU')  # Reset to CPU for safety
+except Exception as e:
+    print(f'⚠️  MindSpore GPU context failed: {e}')
 
 import scanpy as sc
 print('✅ scanpy imported successfully')
@@ -99,6 +107,7 @@ mkdir -p "$FULL_ENV_PATH/../../results"
 echo "Testing CellFM embedding script..."
 echo "To test embeddings, run:"
 echo "mamba activate $FULL_ENV_PATH"
+echo "# Environment will use CUDA 11.6 for MindSpore GPU compatibility"
 echo "python fm_scripts/cellfm_embeddings.py --input pbmc3k_raw.h5ad --output results/cellfm_embeddings.h5ad"
 
 echo "✅ CellFM environment ready at: $FULL_ENV_PATH"
