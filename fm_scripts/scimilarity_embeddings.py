@@ -29,47 +29,35 @@ def generate_scimilarity_embeddings(adata, model_dir=None):
     
     try:
         import scimilarity
-        import pandas as pd
+        from scimilarity.utils import align_dataset, lognorm_counts
         
         # Initialize scimilarity embedding model
         print(f"Loading scimilarity model from {model_dir}")
-        
-        # Try CellEmbedding class first
         cell_embedding = scimilarity.CellEmbedding(model_dir)
         print("✅ scimilarity CellEmbedding loaded successfully")
         
-        # Convert AnnData to format expected by scimilarity
-        if hasattr(adata.X, 'toarray'):
-            X = adata.X.toarray()
-        else:
-            X = adata.X
-            
-        # Create expression DataFrame (scimilarity expects genes as columns)
-        gene_names = adata.var_names.tolist()
-        cell_names = adata.obs_names.tolist()
-        expr_df = pd.DataFrame(X, index=cell_names, columns=gene_names)
+        # Prepare data for scimilarity
+        print("Preparing data for scimilarity...")
         
+        # Step 1: Align gene space to model's gene order
+        print("Aligning dataset to model gene order...")
+        adata_aligned = align_dataset(adata, cell_embedding.gene_order)
+        print(f"Aligned data shape: {adata_aligned.shape}")
+        
+        # Step 2: Log normalize (transcripts per 10k)
+        print("Log normalizing counts...")
+        adata_normalized = lognorm_counts(adata_aligned)
+        print("Data normalization complete")
+        
+        # Step 3: Get expression matrix for embedding
+        X_for_embedding = adata_normalized.X
+        print(f"Expression matrix shape: {X_for_embedding.shape}")
+        print(f"Expression matrix type: {type(X_for_embedding)}")
+        
+        # Step 4: Generate embeddings
         print("Computing embeddings with scimilarity...")
+        embeddings = cell_embedding.get_embeddings(X_for_embedding)
         
-        # Try different methods to get embeddings
-        if hasattr(cell_embedding, 'embed'):
-            embeddings = cell_embedding.embed(expr_df)
-        elif hasattr(cell_embedding, 'get_embeddings'):
-            embeddings = cell_embedding.get_embeddings(expr_df)
-        elif hasattr(cell_embedding, 'transform'):
-            embeddings = cell_embedding.transform(expr_df)
-        else:
-            # Check available methods
-            methods = [m for m in dir(cell_embedding) if not m.startswith('_')]
-            print(f"Available methods: {methods}")
-            raise AttributeError("No embedding method found")
-        
-        # Convert to numpy if needed
-        if hasattr(embeddings, 'values'):
-            embeddings = embeddings.values
-        elif isinstance(embeddings, list):
-            embeddings = np.array(embeddings)
-            
         print(f"Generated embeddings shape: {embeddings.shape}")
         return embeddings
         
