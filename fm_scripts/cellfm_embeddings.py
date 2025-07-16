@@ -42,8 +42,15 @@ def generate_cellfm_embeddings(adata, model_dir=None):
         print(f"✅ MindSpore: {ms.__version__}")
         print("✅ CellFM modules imported successfully")
         
-        # Set MindSpore context for GPU
-        ms.set_context(mode=ms.GRAPH_MODE, device_target="GPU")
+        # Set MindSpore context - try GPU first, fallback to CPU
+        try:
+            ms.set_context(mode=ms.GRAPH_MODE, device_target="GPU")
+            print("✅ Using MindSpore GPU mode")
+        except RuntimeError as gpu_error:
+            print(f"⚠️  GPU not available for MindSpore: {gpu_error}")
+            print("🔄 Falling back to CPU mode...")
+            ms.set_context(mode=ms.GRAPH_MODE, device_target="CPU")
+            print("✅ Using MindSpore CPU mode")
         
         # Download CellFM model from Hugging Face if not present
         print("Setting up CellFM model...")
