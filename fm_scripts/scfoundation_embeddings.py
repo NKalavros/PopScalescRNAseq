@@ -217,20 +217,21 @@ def generate_embeddings_encoder_only(encoder, expression_matrix, gene_names, con
                             
                             # Combine gene and expression embeddings
                             combined_embeddings = gene_embeddings + expr_embeddings
-                        else:
-                            # Use expression as scaling factor
-                            combined_embeddings = gene_embeddings * expr_tensor.unsqueeze(-1)
-                        
-                        # Pass through encoder layers
-                        encoder_output = combined_embeddings
-                        
-                        # Apply encoder layers if available
-                        if hasattr(encoder, 'layers'):
-                            for layer in encoder.layers:
-                                encoder_output = layer(encoder_output)
-                        elif hasattr(encoder, 'encoder_layers'):
-                            for layer in encoder.encoder_layers:
-                                encoder_output = layer(encoder_output)
+                            # Pass through encoder layers
+                            encoder_output = combined_embeddings
+                            # Apply transformer layers, supplying padding_mask if required
+                            if hasattr(encoder, 'layers'):
+                                for layer in encoder.layers:
+                                    try:
+                                        encoder_output = layer(encoder_output)
+                                    except TypeError:
+                                        encoder_output = layer(encoder_output, padding_mask=None)
+                            elif hasattr(encoder, 'encoder_layers'):
+                                for layer in encoder.encoder_layers:
+                                    try:
+                                        encoder_output = layer(encoder_output)
+                                    except TypeError:
+                                        encoder_output = layer(encoder_output, padding_mask=None)
                         
                         # Pool to get cell embedding (mean pooling over genes)
                         cell_embedding = encoder_output.mean(dim=1).squeeze(0)  # (hidden_dim,)
