@@ -101,7 +101,16 @@ def main():
         print('covert gene feature into 19264')
         gexpr_feature, to_fill_columns,var = main_gene_selection(gexpr_feature,gene_list)
         assert gexpr_feature.shape[1]>=19264
-    
+    # What if it is bigger?
+    elif gexpr_feature.shape[1]>19264:
+        print('covert gene feature into 19264')
+        gexpr_feature = gexpr_feature.iloc[:,:19264]
+        var = pd.DataFrame(index=gexpr_feature.columns)
+        var['mask'] = [0 for _ in range(gexpr_feature.shape[1])]
+        to_fill_columns = []
+    else:
+        gexpr_feature, to_fill_columns,var = main_gene_selection(gexpr_feature,gene_list)
+        assert gexpr_feature.shape[1]>=19264
     if (args.pre_normalized == 'F') and (args.input_type == 'bulk'):
         adata = sc.AnnData(gexpr_feature)
         sc.pp.normalize_total(adata)
