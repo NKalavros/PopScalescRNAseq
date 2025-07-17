@@ -79,6 +79,7 @@ def main():
         gexpr_feature = pd.DataFrame(gexpr_feature.toarray())
     elif args.input[-4:]=='h5ad':
         gexpr_feature = sc.read_h5ad(args.input)
+        gexpr_feature.var_names_make_unique()
         idx = gexpr_feature.obs_names.tolist()
         try:
             col = gexpr_feature.var.gene_name.tolist()
