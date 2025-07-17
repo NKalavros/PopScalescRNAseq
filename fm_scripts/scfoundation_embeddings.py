@@ -103,14 +103,12 @@ def main():
         assert gexpr_feature.shape[1]>=19264
     # What if it is bigger?
     elif gexpr_feature.shape[1]>19264:
-        print('covert gene feature into 19264')
+        print('covert gene feature into 3000')
         # Take the top expressed genes (by mean)
         mean_expr = gexpr_feature.mean(axis=0)
-        top_genes = mean_expr.nlargest(19264).index
+        top_genes = mean_expr.nlargest(3000).index
         gexpr_feature = gexpr_feature[top_genes]
-        var = pd.DataFrame(index=gexpr_feature.columns)
-        var['mask'] = [0 for _ in range(gexpr_feature.shape[1])]
-        to_fill_columns = []
+        gexpr_feature, to_fill_columns,var = main_gene_selection(gexpr_feature,gene_list)
     else:
         gexpr_feature, to_fill_columns,var = main_gene_selection(gexpr_feature,gene_list)
         assert gexpr_feature.shape[1]>=19264
