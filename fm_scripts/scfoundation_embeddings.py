@@ -242,20 +242,30 @@ def generate_embeddings_encoder_only(encoder, expression_matrix, gene_names, con
                                              getattr(encoder, 'encoder_layers', []))
                             for layer in layers:
                                 try:
-                                    # first try with padding_mask as a positional argument
-                                    encoder_output = layer(encoder_output, padding_mask)
-                                except TypeError:
-                                    try:
-                                        # then try the “padding_mask” kwarg
-                                        encoder_output = layer(encoder_output, padding_mask=padding_mask)
-                                    except TypeError:
+                                    # Try with padding_mask as a keyword argument first
+                                    encoder_output = layer(encoder_output, padding_mask=padding_mask)
+                                except TypeError as e:
+                                    if "unexpected keyword argument 'padding_mask'" in str(e):
                                         try:
-                                            # then try PyTorch naming
+                                            # Fallback to positional argument
+                                            encoder_output = layer(encoder_output, padding_mask)
+                                        except TypeError as e2:
+                                            if "takes 2 positional arguments but 3 were given" in str(e2):
+                                                # Fallback to no mask argument
+                                                encoder_output = layer(encoder_output)
+                                            else:
+                                                raise e2
+                                    elif "missing 1 required positional argument: 'padding_mask'" in str(e):
+                                        # This case should be handled by the positional fallback, but as a safeguard:
+                                        encoder_output = layer(encoder_output, padding_mask)
+                                    else:
+                                        # Try pytorch standard name if the first attempt fails for other reasons
+                                        try:
                                             encoder_output = layer(encoder_output, src_key_padding_mask=padding_mask)
                                         except TypeError:
-                                            # fallback to no mask argument
+                                            # Final fallback to no mask
                                             encoder_output = layer(encoder_output)
-                        
+
                         # Pool to get cell embedding (mean pooling over genes)
                         cell_embedding = encoder_output.mean(dim=1).squeeze(0)  # (hidden_dim,)
                         
