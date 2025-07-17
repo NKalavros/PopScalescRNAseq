@@ -43,5 +43,11 @@ print('✅ scGPT imported successfully')
 print('🎉 scGPT environment setup COMPLETE!')
 "
 
+cd /gpfs/scratch/nk4167/miniconda/envs/scgpt_env
+mkdir -p models
+# Gdrive link: https://drive.google.com/drive/folders/1oWh_-ZRdhtoGQ2Fw24HP41FgLoomVo-y?usp=sharing
+echo "Downloading scGPT model..."
+gdown --id 1oWh_-ZRdhtoGQ2Fw24HP41FgLoomVo-y -O models/scgpt_model.pth
+
 echo "✅ scGPT environment ready at: $FULL_ENV_PATH"
 echo "To activate: mamba activate $FULL_ENV_PATH"
