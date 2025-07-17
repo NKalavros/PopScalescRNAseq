@@ -288,14 +288,16 @@ def generate_scfoundation_embeddings(adata, model_dir=None, repo_dir=None):
                             try:
                                 # Prepare all required inputs with correct dtypes
                                 encoder_labels = torch.zeros_like(X_batch_binned, dtype=torch.long)
-                                mask_labels = torch.zeros_like(X_batch_binned, dtype=torch.long)
+                                mask_labels    = torch.zeros_like(X_batch_binned, dtype=torch.long)
+                                # Cast token‐index tensors to float32 to match model weights
+                                X_input        = X_batch_binned.float()
                                 
                                 output = model(
-                                    X_batch_binned,  # input_ids (Long)
-                                    padding_label=padding_mask.long(),  # Convert bool to long
+                                    X_input,                                   # input as float32
+                                    padding_label=padding_mask.long(),
                                     encoder_position_gene_ids=position_ids,
                                     encoder_labels=encoder_labels,
-                                    decoder_data=X_batch_binned,
+                                    decoder_data=X_input,                      # also pass float32 here
                                     mask_gene_name=padding_mask.long(),
                                     mask_labels=mask_labels,
                                     decoder_position_gene_ids=position_ids,
