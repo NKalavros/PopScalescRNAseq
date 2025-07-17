@@ -106,14 +106,14 @@ def generate_cellfm_embeddings(adata, model_dir=None):
         expected_genes = 24080
         print(f"Model expects {expected_genes} genes, data has {n_genes} genes")
         
+        # Store original expression data for model input
+        if hasattr(adata.X, 'toarray'):
+            X_data = adata.X.toarray()
+        else:
+            X_data = adata.X.copy()
+        
         if n_genes != expected_genes:
             print(f"Adjusting gene count from {n_genes} to {expected_genes}")
-            
-            # Get expression data
-            if hasattr(adata.X, 'toarray'):
-                X_data = adata.X.toarray()
-            else:
-                X_data = adata.X
             
             if n_genes < expected_genes:
                 # Pad with zeros if we have fewer genes
@@ -125,10 +125,6 @@ def generate_cellfm_embeddings(adata, model_dir=None):
                 # Truncate if we have more genes (keep first genes)
                 X_data = X_data[:, :expected_genes]
                 print(f"Truncated to first {expected_genes} genes")
-            
-            # Update the data
-            adata.X = X_data
-            n_genes = expected_genes
         
         # Initialize CellFM model with proper configuration
         print("Initializing CellFM model...")
@@ -150,10 +146,6 @@ def generate_cellfm_embeddings(adata, model_dir=None):
         
         # Convert data to MindSpore tensor format
         print("Converting data to MindSpore format...")
-        if hasattr(adata.X, 'toarray'):
-            X_data = adata.X.toarray()
-        else:
-            X_data = adata.X
         
         # Convert to MindSpore tensor
         X_tensor = ms.Tensor(X_data, dtype=ms.float32)

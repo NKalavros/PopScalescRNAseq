@@ -23,22 +23,33 @@ echo "=== Downloading SRP349751 Endometrial Carcinoma Dataset ==="
 echo "Output directory: $OUTPUT_DIR"
 echo "Temporary directory: $TEMP_DIR"
 
-# Step 1: Get run information using SRA toolkit
-echo "Step 1: Fetching run information for $PROJECT_ID..."
-esearch -db sra -query "$PROJECT_ID" | efetch -format runinfo > "$TEMP_DIR/runinfo.csv"
+# Step 1: Define run accessions directly (since sra-tools conda package doesn't include esearch/efetch)
+echo "Step 1: Setting up run accessions for $PROJECT_ID..."
 
-# Check if we got the run info
-if [ ! -s "$TEMP_DIR/runinfo.csv" ]; then
-    echo "Error: Failed to fetch run information for $PROJECT_ID"
-    exit 1
-fi
+# SRP349751 run accessions (15 total experiments)
+cat > "$TEMP_DIR/run_accessions.txt" << 'EOF'
+SRR19842866
+SRR19842867
+SRR19842868
+SRR19842869
+SRR19842870
+SRR19842871
+SRR17165226
+SRR17165227
+SRR17165228
+SRR17165223
+SRR17165224
+SRR17165225
+SRR17165229
+SRR17165230
+SRR17165231
+EOF
 
-echo "Found the following runs:"
-cat "$TEMP_DIR/runinfo.csv" | cut -d',' -f1,12,30 | head -10
+echo "Run accessions prepared:"
+cat "$TEMP_DIR/run_accessions.txt"
 
-# Step 2: Extract run accessions
-echo "Step 2: Extracting run accessions..."
-tail -n +2 "$TEMP_DIR/runinfo.csv" | cut -d',' -f1 > "$TEMP_DIR/run_accessions.txt"
+# Step 2: Verify run accessions are available
+echo "Step 2: Verifying run availability..."
 
 RUN_COUNT=$(cat "$TEMP_DIR/run_accessions.txt" | wc -l)
 echo "Total runs to download: $RUN_COUNT"
