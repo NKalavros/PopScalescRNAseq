@@ -206,7 +206,7 @@ def main():
             if args.output_type=='cell':
                 # Fix: Use safe pad ID that's within bounds
                 pad_id = min(int(data_gene_ids.max()), max_gene_id)
-                print(f"Using pad_id: {pad_id}, max allowed: {max_gene_id}")
+                #print(f"Using pad_id: {pad_id}, max allowed: {max_gene_id}")
                 
                 position_gene_ids, _ = gatherData(data_gene_ids, value_labels, pad_id)
                 
