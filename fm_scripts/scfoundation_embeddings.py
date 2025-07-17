@@ -287,21 +287,23 @@ def generate_scfoundation_embeddings(adata, model_dir=None, repo_dir=None):
                             print("Using full model call...")
                             try:
                                 # Prepare all required inputs with correct dtypes
-                                encoder_labels = torch.zeros_like(X_batch_binned, dtype=torch.long)
-                                mask_labels    = torch.zeros_like(X_batch_binned, dtype=torch.long)
-                                # Cast token‐index tensors to float32 to match model weights
-                                X_input        = X_batch_binned.float()
+                                encoder_labels     = torch.zeros_like(X_batch_binned, dtype=torch.long)
+                                mask_labels        = torch.zeros_like(X_batch_binned, dtype=torch.long)
+                                # Cast token-index tensors to float32 for model weights consistency
+                                X_input            = X_batch_binned.float()
+                                # Ensure padding mask is bool for src_key_padding_mask support
+                                padding_mask_bool  = padding_mask  # already bool
                                 
                                 output = model(
-                                    X_input,                                   # input as float32
-                                    padding_label=padding_mask.long(),
+                                    X_input,                                      # input as float32
+                                    padding_label=padding_mask_bool,              # bool mask
                                     encoder_position_gene_ids=position_ids,
                                     encoder_labels=encoder_labels,
-                                    decoder_data=X_input,                      # also pass float32 here
-                                    mask_gene_name=padding_mask.long(),
+                                    decoder_data=X_input,                         # pass float32 here too
+                                    mask_gene_name=padding_mask_bool,             # bool mask
                                     mask_labels=mask_labels,
                                     decoder_position_gene_ids=position_ids,
-                                    decoder_data_padding_labels=padding_mask.long()
+                                    decoder_data_padding_labels=padding_mask_bool  # bool mask
                                 )
                                 
                                 # Extract embeddings from output
