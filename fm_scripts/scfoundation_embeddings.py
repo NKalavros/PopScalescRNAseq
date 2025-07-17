@@ -157,7 +157,7 @@ def preprocess_for_encoder(adata, gene_index_file):
     
     return full_expression, target_genes, gene_to_idx
 
-def generate_embeddings_encoder_only(encoder, expression_matrix, gene_names, config, batch_size=32):
+def generate_embeddings_encoder_only(encoder, expression_matrix, gene_names, config, batch_size=32, verbose=True):
     """
     Generate embeddings using only the encoder part of scFoundation
     Following xTrimoGene: encoder processes only non-zero genes
@@ -169,6 +169,7 @@ def generate_embeddings_encoder_only(encoder, expression_matrix, gene_names, con
     n_cells = expression_matrix.shape[0]
     n_genes = expression_matrix.shape[1]
     all_embeddings = []
+    failed_cells = []
     
     print(f"Processing {n_cells} cells in batches of {batch_size}")
     
@@ -191,6 +192,15 @@ def generate_embeddings_encoder_only(encoder, expression_matrix, gene_names, con
                     # Handle cells with no expression
                     batch_embeddings.append(np.zeros(config.get('hidden_size', 512)))
                     continue
+                
+                # Handle cells with very few expressed genes
+                if len(nonzero_indices) < 10:
+                    # Pad to minimum sequence length to avoid transformer issues
+                    min_genes = 10
+                    padding_needed = min_genes - len(nonzero_indices)
+                    # Add some very small non-zero values for padding genes
+                    nonzero_indices = np.concatenate([nonzero_indices, np.arange(padding_needed)])
+                    nonzero_expr = np.concatenate([nonzero_expr, np.full(padding_needed, 1e-6)])
                 
                 # Extract non-zero expressions and their indices
                 nonzero_expr = cell_expr[nonzero_indices]
@@ -217,21 +227,43 @@ def generate_embeddings_encoder_only(encoder, expression_matrix, gene_names, con
                             
                             # Combine gene and expression embeddings
                             combined_embeddings = gene_embeddings + expr_embeddings
-                            # Pass through encoder layers
-                            encoder_output = combined_embeddings
-                            # Apply transformer layers, supplying padding_mask if required
-                            if hasattr(encoder, 'layers'):
-                                for layer in encoder.layers:
+                        else:
+                            # Use expression as scaling factor
+                            combined_embeddings = gene_embeddings * expr_tensor.unsqueeze(-1)
+                        
+                        # Pass through encoder layers
+                        encoder_output = combined_embeddings
+                        
+                        # Apply encoder layers if available
+                        if hasattr(encoder, 'layers') or hasattr(encoder, 'encoder_layers'):
+                            # Create padding mask (all positions are valid for non-zero genes)
+                            seq_len = encoder_output.size(1)
+                            padding_mask = torch.zeros(1, seq_len, dtype=torch.bool, device=device)
+                            
+                            # Get layers
+                            layers = getattr(encoder, 'layers', getattr(encoder, 'encoder_layers', []))
+                            
+                            for layer in layers:
+                                try:
+                                    # Try with padding mask first
+                                    encoder_output = layer(encoder_output, src_key_padding_mask=padding_mask)
+                                except TypeError:
+                                    # If that fails, try without padding mask
                                     try:
                                         encoder_output = layer(encoder_output)
-                                    except TypeError:
-                                        encoder_output = layer(encoder_output, padding_mask=None)
-                            elif hasattr(encoder, 'encoder_layers'):
-                                for layer in encoder.encoder_layers:
-                                    try:
-                                        encoder_output = layer(encoder_output)
-                                    except TypeError:
-                                        encoder_output = layer(encoder_output, padding_mask=None)
+                                    except Exception as layer_e:
+                                        print(f"Layer forward pass failed: {layer_e}")
+                                        # Try alternative approaches
+                                        if hasattr(layer, 'self_attn'):
+                                            # Direct attention computation
+                                            attn_output, _ = layer.self_attn(encoder_output, encoder_output, encoder_output)
+                                            encoder_output = layer.dropout(attn_output) + encoder_output
+                                            encoder_output = layer.norm1(encoder_output)
+                                            ff_output = layer.linear2(layer.dropout(layer.activation(layer.linear1(encoder_output))))
+                                            encoder_output = layer.dropout(ff_output) + encoder_output
+                                            encoder_output = layer.norm2(encoder_output)
+                                        else:
+                                            raise layer_e
                         
                         # Pool to get cell embedding (mean pooling over genes)
                         cell_embedding = encoder_output.mean(dim=1).squeeze(0)  # (hidden_dim,)
@@ -253,7 +285,12 @@ def generate_embeddings_encoder_only(encoder, expression_matrix, gene_names, con
                     batch_embeddings.append(cell_embedding.cpu().numpy())
                     
                 except Exception as e:
-                    print(f"Error processing cell {batch_start + cell_idx}: {e}")
+                    cell_id = batch_start + cell_idx
+                    failed_cells.append(cell_id)
+                    if verbose:
+                        print(f"Error processing cell {cell_id}: {e}")
+                        print(f"  - Number of expressed genes: {len(nonzero_indices)}")
+                        print(f"  - Expression range: [{np.min(nonzero_expr):.4f}, {np.max(nonzero_expr):.4f}]")
                     batch_embeddings.append(np.zeros(config.get('hidden_size', 512)))
             
             # Stack batch embeddings
@@ -271,9 +308,16 @@ def generate_embeddings_encoder_only(encoder, expression_matrix, gene_names, con
     # L2 normalize
     embeddings = embeddings / (np.linalg.norm(embeddings, axis=1, keepdims=True) + 1e-8)
     
+    # Print summary
+    if failed_cells:
+        print(f"\nWarning: {len(failed_cells)} cells failed processing and were assigned zero embeddings")
+        print(f"Failed cell indices: {failed_cells[:10]}{'...' if len(failed_cells) > 10 else ''}")
+    else:
+        print(f"\nAll {n_cells} cells processed successfully!")
+    
     return embeddings
 
-def generate_scfoundation_embeddings(adata, model_dir=None, repo_dir=None):
+def generate_scfoundation_embeddings(adata, model_dir=None, repo_dir=None, batch_size=16, verbose=True):
     """Main function to generate scFoundation embeddings efficiently"""
     print("Generating scFoundation embeddings...")
     
@@ -301,10 +345,9 @@ def generate_scfoundation_embeddings(adata, model_dir=None, repo_dir=None):
         
         # Generate embeddings with encoder only
         try:
-            # Use smaller batch size for memory efficiency
-            batch_size = 16 if torch.cuda.is_available() else 32
             embeddings = generate_embeddings_encoder_only(
-                encoder, expression_matrix, gene_names, config, batch_size=batch_size
+                encoder, expression_matrix, gene_names, config, 
+                batch_size=batch_size, verbose=verbose
             )
             
             print(f"Generated scFoundation embeddings shape: {embeddings.shape}")
@@ -335,6 +378,7 @@ def main():
     parser.add_argument('--scfoundation-repo', help='scFoundation repository directory',
                        default="/gpfs/scratch/nk4167/miniconda/envs/scFoundation_env/scFoundation")
     parser.add_argument('--batch-size', type=int, default=16, help='Batch size for processing')
+    parser.add_argument('--verbose', action='store_true', help='Print detailed error messages')
     
     args = parser.parse_args()
     
@@ -345,7 +389,10 @@ def main():
     adata = load_data(args.input)
     
     # Generate embeddings
-    embeddings = generate_scfoundation_embeddings(adata, args.model_dir, args.scfoundation_repo)
+    embeddings = generate_scfoundation_embeddings(
+        adata, args.model_dir, args.scfoundation_repo, 
+        batch_size=args.batch_size, verbose=args.verbose
+    )
     
     # Store embeddings in AnnData
     adata.obsm["X_scFoundation"] = embeddings
