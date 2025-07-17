@@ -43,7 +43,9 @@ pip install matplotlib==3.5.3 anndata==0.8.0 scanpy==1.8.2
 # Create models directory
 echo "Creating models directory..."
 mkdir -p "$FULL_ENV_PATH/models"
-
+echo 'Cloning scFoundation repository...'
+cd "$FULL_ENV_PATH"
+git clone https://github.com/biomap-research/scFoundation/
 echo "⚠️  Model download requires manual authentication."
 echo "Please download the following files manually and place them in:"
 echo "  $FULL_ENV_PATH/models/"

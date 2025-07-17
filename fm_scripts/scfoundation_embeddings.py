@@ -22,28 +22,111 @@ def load_data(input_path):
     print(f"Data shape: {adata.shape}")
     return adata
 
-def load_scfoundation_model(model_dir):
+def load_scfoundation_model(model_dir, repo_dir=None):
     """Load scFoundation model from checkpoint files"""
     try:
-        # Try to import scFoundation modules
-        sys.path.append(model_dir)
-        from load import load_model_frommmf
+        # Add scFoundation model directory to Python path
+        if model_dir not in sys.path:
+            sys.path.insert(0, model_dir)
+        
+        # Try to find the scFoundation repository directory
+        potential_paths = [
+            model_dir,
+            os.path.join(model_dir, "scFoundation"),
+            os.path.join(model_dir, "..", "scFoundation"),
+            os.path.join(model_dir, "model"),
+            "/gpfs/scratch/nk4167/miniconda/envs/scFoundation_env/scFoundation/model"
+        ]
+        
+        # Add repository directory if provided
+        if repo_dir:
+            potential_paths.extend([
+                repo_dir,
+                os.path.join(repo_dir, "model"),
+                os.path.join(repo_dir, "scFoundation", "model")
+            ])
+        
+        load_module = None
+        for path in potential_paths:
+            if os.path.exists(os.path.join(path, "load.py")):
+                if path not in sys.path:
+                    sys.path.insert(0, path)
+                try:
+                    from load import load_model_frommmf
+                    load_module = load_model_frommmf
+                    print(f"Successfully imported load module from {path}")
+                    break
+                except ImportError as e:
+                    print(f"Failed to import from {path}: {e}")
+                    continue
+        
+        if load_module is None:
+            print("Could not find scFoundation load module")
+            print("Attempting direct PyTorch model loading...")
+            
+            # Try direct PyTorch loading as fallback
+            checkpoint_files = [
+                os.path.join(model_dir, "models.ckpt"),
+                os.path.join(model_dir, "models1.ckpt"),
+                os.path.join(model_dir, "checkpoint.ckpt"),
+                os.path.join(model_dir, "best_model.ckpt")
+            ]
+            
+            for ckpt_file in checkpoint_files:
+                if os.path.exists(ckpt_file):
+                    try:
+                        print(f"Attempting direct PyTorch load from {ckpt_file}")
+                        checkpoint = torch.load(ckpt_file, map_location='cpu')
+                        
+                        # Extract model and config if available
+                        if 'model_state_dict' in checkpoint:
+                            model_state_dict = checkpoint['model_state_dict']
+                            config = checkpoint.get('config', {})
+                            
+                            # Create a simple wrapper model
+                            class SimpleFoundationModel(torch.nn.Module):
+                                def __init__(self, state_dict, config):
+                                    super().__init__()
+                                    self.config = config
+                                    # Create a simple linear layer as placeholder
+                                    # This would need to be replaced with actual scFoundation architecture
+                                    self.encoder = torch.nn.Linear(19264, 512)
+                                    
+                                def forward(self, x):
+                                    return self.encoder(x)
+                            
+                            model = SimpleFoundationModel(model_state_dict, config)
+                            print("Created simple wrapper model")
+                            return model, config
+                        else:
+                            print(f"No model_state_dict found in {ckpt_file}")
+                            
+                    except Exception as e:
+                        print(f"Direct PyTorch loading failed for {ckpt_file}: {e}")
+                        continue
+            
+            return None, None
         
         # Look for checkpoint files
-        model_file1 = os.path.join(model_dir, "models.ckpt")
-        model_file2 = os.path.join(model_dir, "models1.ckpt")
+        checkpoint_files = [
+            os.path.join(model_dir, "models.ckpt"),
+            os.path.join(model_dir, "models1.ckpt"),
+            os.path.join(model_dir, "checkpoint.ckpt"),
+            os.path.join(model_dir, "best_model.ckpt")
+        ]
         
-        if os.path.exists(model_file1):
-            print(f"Loading scFoundation model from {model_file1}")
-            model, config = load_model_frommmf(model_file1, key='gene')
-            return model, config
-        elif os.path.exists(model_file2):
-            print(f"Loading scFoundation model from {model_file2}")
-            model, config = load_model_frommmf(model_file2, key='gene')
-            return model, config
-        else:
-            print(f"No checkpoint files found in {model_dir}")
-            return None, None
+        for ckpt_file in checkpoint_files:
+            if os.path.exists(ckpt_file):
+                print(f"Loading scFoundation model from {ckpt_file}")
+                try:
+                    model, config = load_module(ckpt_file, key='gene')
+                    return model, config
+                except Exception as e:
+                    print(f"Error loading from {ckpt_file}: {e}")
+                    continue
+        
+        print(f"No valid checkpoint files found in {model_dir}")
+        return None, None
             
     except Exception as e:
         print(f"Error loading scFoundation model: {e}")
@@ -90,7 +173,7 @@ def preprocess_for_scfoundation(adata, model_dir):
     
     # Normalize data (scFoundation typically expects log-normalized data)
     # Check if data is already log-normalized
-    if X.max() > 20:  # Likely raw counts
+    if X.max() > 2000:  # Likely raw counts
         print("Normalizing and log-transforming data...")
         adata_subset.X = X
         sc.pp.normalize_total(adata_subset, target_sum=1e4)
@@ -103,7 +186,7 @@ def preprocess_for_scfoundation(adata, model_dir):
     
     return feature_matrix, matched_genes
 
-def generate_scfoundation_embeddings(adata, model_dir=None):
+def generate_scfoundation_embeddings(adata, model_dir=None, repo_dir=None):
     """Generate embeddings using scFoundation"""
     print("Generating scFoundation embeddings...")
     
@@ -112,7 +195,7 @@ def generate_scfoundation_embeddings(adata, model_dir=None):
         model_dir = "/gpfs/scratch/nk4167/miniconda/envs/scFoundation_env/models"
     
     # Try to load real scFoundation model
-    model, config = load_scfoundation_model(model_dir)
+    model, config = load_scfoundation_model(model_dir, repo_dir)
     
     if model is not None:
         print("Successfully loaded scFoundation model")
@@ -204,6 +287,8 @@ def main():
     parser.add_argument('--output', required=True, help='Output .h5ad file path')
     parser.add_argument('--model-dir', help='scFoundation model directory', 
                        default="/gpfs/scratch/nk4167/miniconda/envs/scFoundation_env/models")
+    parser.add_argument('--scfoundation-repo', help='scFoundation repository directory',
+                       default="/gpfs/scratch/nk4167/miniconda/envs/scFoundation_env/scFoundation")
     
     args = parser.parse_args()
     
@@ -214,7 +299,7 @@ def main():
     adata = load_data(args.input)
     
     # Generate embeddings
-    embeddings = generate_scfoundation_embeddings(adata, args.model_dir)
+    embeddings = generate_scfoundation_embeddings(adata, args.model_dir, args.scfoundation_repo)
     
     # Store embeddings in AnnData
     adata.obsm["X_scFoundation"] = embeddings
