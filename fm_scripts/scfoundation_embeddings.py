@@ -242,15 +242,19 @@ def generate_embeddings_encoder_only(encoder, expression_matrix, gene_names, con
                                              getattr(encoder, 'encoder_layers', []))
                             for layer in layers:
                                 try:
-                                    # first try the “padding_mask” kwarg
-                                    encoder_output = layer(encoder_output, padding_mask=padding_mask)
+                                    # first try with padding_mask as a positional argument
+                                    encoder_output = layer(encoder_output, padding_mask)
                                 except TypeError:
                                     try:
-                                        # then try PyTorch naming
-                                        encoder_output = layer(encoder_output, src_key_padding_mask=padding_mask)
+                                        # then try the “padding_mask” kwarg
+                                        encoder_output = layer(encoder_output, padding_mask=padding_mask)
                                     except TypeError:
-                                        # fallback to no mask argument
-                                        encoder_output = layer(encoder_output)
+                                        try:
+                                            # then try PyTorch naming
+                                            encoder_output = layer(encoder_output, src_key_padding_mask=padding_mask)
+                                        except TypeError:
+                                            # fallback to no mask argument
+                                            encoder_output = layer(encoder_output)
                         
                         # Pool to get cell embedding (mean pooling over genes)
                         cell_embedding = encoder_output.mean(dim=1).squeeze(0)  # (hidden_dim,)
