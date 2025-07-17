@@ -22,6 +22,7 @@ def load_data(input_path):
     """Load data from .h5ad file"""
     print(f"Loading data from {input_path}")
     adata = sc.read_h5ad(input_path)
+    adata.var_names_make_unique()
     print(f"Data shape: {adata.shape}")
     return adata
 

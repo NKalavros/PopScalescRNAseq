@@ -19,6 +19,7 @@ def load_data(input_path):
     """Load data from .h5ad file"""
     print(f"Loading data from {input_path}")
     adata = ad.read_h5ad(input_path)
+    adata.var_names_make_unique()  # Ensure gene names are unique
     print(f"Data shape: {adata.shape}")
     return adata
 
@@ -150,20 +151,28 @@ def preprocess_for_scfoundation(adata, model_dir, repo_dir='/gpfs/scratch/nk4167
     
     print(f"Target gene set size: {len(target_genes)}")
     
+    # Handle duplicate gene names by making them unique
+    adata_copy = adata.copy()
+    
+    # Make gene names unique if there are duplicates
+    if not adata_copy.var.index.is_unique:
+        print("Found duplicate gene names, making them unique...")
+        adata_copy.var_names_unique()
+    
     # Match genes in data with target genes
-    adata.var['gene_name'] = adata.var.index.tolist()
+    adata_copy.var['gene_name'] = adata_copy.var.index.tolist()
     matched_genes = []
     matched_indices = []
     
     for i, gene in enumerate(target_genes):
-        if gene in adata.var.index:
+        if gene in adata_copy.var.index:
             matched_genes.append(gene)
             matched_indices.append(i)
     
     print(f"Matched {len(matched_genes)} genes out of {len(target_genes)} target genes")
     
     # Subset data to matched genes
-    adata_subset = adata[:, matched_genes].copy()
+    adata_subset = adata_copy[:, matched_genes].copy()
     
     # Convert to dense if sparse
     if issparse(adata_subset.X):
