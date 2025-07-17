@@ -100,4 +100,4 @@ subprocess.run(['rclone', 'copy', 'figures/X_umap_scGPT_scGPT.png', 'GDrive:Kidn
 subprocess.run(['rclone', 'copy', 'figures/X_umap_regular.png', 'GDrive:KidneyAtlas/lake/umaps/'])
 subprocess.run(['rclone', 'copy', 'figures/X_umap_scimilarity_scimilarity.png', 'GDrive:KidneyAtlas/lake/umaps/'])
 subprocess.run(['rclone', 'copy', 'figures/X_umap_Geneformer_Geneformer.png', 'GDrive:KidneyAtlas/lake/umaps/'])
-#
+subprocess.run(['rclone', 'copy', 'figures/scib_results.svg', 'GDrive:KidneyAtlas/lake/umaps/'])
