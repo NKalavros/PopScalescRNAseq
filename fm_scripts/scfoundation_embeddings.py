@@ -232,8 +232,35 @@ def generate_scfoundation_embeddings(adata, model_dir=None, repo_dir=None):
                     X_batch = torch.tensor(batch_data, dtype=torch.float32, device=device)
                     
                     try:
-                        # Generate embeddings for this batch
-                        batch_embeddings = model(X_batch)
+                        # Prepare inputs for scFoundation MaeAutobin model
+                        batch_size_actual = batch_data.shape[0]
+                        gene_dim = batch_data.shape[1]
+                        
+                        # Create required inputs for MaeAutobin
+                        # These are based on the scFoundation model requirements
+                        padding_label = torch.zeros(batch_size_actual, gene_dim, dtype=torch.long, device=device)
+                        encoder_position_gene_ids = torch.arange(gene_dim, device=device).unsqueeze(0).expand(batch_size_actual, -1)
+                        encoder_labels = torch.zeros(batch_size_actual, gene_dim, dtype=torch.long, device=device)
+                        
+                        # For decoder inputs, we can use the same data
+                        decoder_data = X_batch.clone()
+                        mask_gene_name = torch.zeros(batch_size_actual, gene_dim, dtype=torch.long, device=device)
+                        mask_labels = torch.zeros(batch_size_actual, gene_dim, dtype=torch.long, device=device)
+                        decoder_position_gene_ids = encoder_position_gene_ids.clone()
+                        decoder_data_padding_labels = padding_label.clone()
+                        
+                        # Generate embeddings with proper scFoundation interface
+                        batch_embeddings = model(
+                            X_batch,
+                            padding_label=padding_label,
+                            encoder_position_gene_ids=encoder_position_gene_ids,
+                            encoder_labels=encoder_labels,
+                            decoder_data=decoder_data,
+                            mask_gene_name=mask_gene_name,
+                            mask_labels=mask_labels,
+                            decoder_position_gene_ids=decoder_position_gene_ids,
+                            decoder_data_padding_labels=decoder_data_padding_labels
+                        )
                         
                         # Handle different return types
                         if isinstance(batch_embeddings, tuple):
@@ -244,9 +271,15 @@ def generate_scfoundation_embeddings(adata, model_dir=None, repo_dir=None):
                                 batch_embeddings = batch_embeddings['cell_embeddings']
                             elif 'embeddings' in batch_embeddings:
                                 batch_embeddings = batch_embeddings['embeddings']
+                            elif 'encoder_output' in batch_embeddings:
+                                batch_embeddings = batch_embeddings['encoder_output']
                             else:
                                 # Take first value if dict
                                 batch_embeddings = list(batch_embeddings.values())[0]
+                        
+                        # If output is 3D (batch, seq, dim), pool to 2D (batch, dim)
+                        if len(batch_embeddings.shape) == 3:
+                            batch_embeddings = batch_embeddings.mean(dim=1)  # Average pooling
                         
                         batch_embeddings = batch_embeddings.cpu().numpy()
                         all_embeddings.append(batch_embeddings)

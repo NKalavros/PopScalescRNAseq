@@ -122,6 +122,9 @@ def generate_scgpt_embeddings(adata, model_dir=None):
                 model.load_state_dict(model_dict)
                 print(f"Loaded {len(filtered_dict)}/{len(pretrained_dict)} parameters")
             model.to(device)
+            # Convert model to half precision when using flash attention
+            if hasattr(model, 'use_fast_transformer') and model.use_fast_transformer:
+                model.half()
             model.eval()
             
             # Preprocess data
