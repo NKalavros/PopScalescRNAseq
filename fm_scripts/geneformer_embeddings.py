@@ -31,7 +31,7 @@ def generate_geneformer_embeddings(adata, model_dir=None):
         # Load Geneformer model from Hugging Face (downloads if needed, uses cache if available).
         # We want to load this version: https://huggingface.co/ctheodoris/Geneformer/tree/main/Geneformer-V2-316M
         print("Loading Geneformer model from Hugging Face...")
-        model = AutoModel.from_pretrained('ctheodoris/Geneformer/Geneformer-V2-316M')
+        model = AutoModel.from_pretrained('ctheodoris/Geneformer', revision='main', subfolder='Geneformer-V2-316M')
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         model = model.to(device)
         model.eval()
