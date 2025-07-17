@@ -99,20 +99,19 @@ def main():
     
     if gexpr_feature.shape[1]<19264:
         print('covert gene feature into 19264')
-        mean_expr = gexpr_feature.X.mean(axis=0)
-        # Ge top 3000
-        top_genes = np.argsort(mean_expr)[-3000:]
-        gexpr_feature = gexpr_feature[:,top_genes]
+        # Get top 3000 from the DF
+        mean_expr = gexpr_feature.mean(axis=0)
+        top_genes = mean_expr.nlargest(3000).index
+        gexpr_feature = gexpr_feature[top_genes]
         gexpr_feature, to_fill_columns,var = main_gene_selection(gexpr_feature,gene_list)
         assert gexpr_feature.shape[1]>=19264
     # What if it is bigger?
     elif gexpr_feature.shape[1]>19264:
         print('covert gene feature into 3000')
         # Take the top expressed genes (by mean) X is a sparse array
-        mean_expr = gexpr_feature.X.mean(axis=0)
-        # Ge top 3000
-        top_genes = np.argsort(mean_expr)[-3000:]
-        gexpr_feature = gexpr_feature[:,top_genes]
+        mean_expr = gexpr_feature.mean(axis=0)
+        top_genes = mean_expr.nlargest(3000).index
+        gexpr_feature = gexpr_feature[top_genes]
         gexpr_feature, to_fill_columns,var = main_gene_selection(gexpr_feature,gene_list)
     else:
         gexpr_feature, to_fill_columns,var = main_gene_selection(gexpr_feature,gene_list)
