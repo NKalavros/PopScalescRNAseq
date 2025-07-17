@@ -118,33 +118,70 @@ def generate_scfoundation_embeddings(adata, model_dir=None):
         print("Successfully loaded scFoundation model")
         
         # Preprocess data
-        feature_matrix, matched_genes = preprocess_for_scfoundation(adata, model_dir)
-        
-        # Generate embeddings using the real model
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        model = model.to(device)
-        model.eval()
-        
-        # Convert to tensor
-        X_tensor = torch.tensor(feature_matrix, dtype=torch.float32, device=device)
-        
-        with torch.no_grad():
-            # Generate embeddings (this may need adjustment based on exact scFoundation API)
-            try:
-                embeddings = model(X_tensor)
-                if isinstance(embeddings, tuple):
-                    embeddings = embeddings[0]  # Take first element if tuple
-                embeddings = embeddings.cpu().numpy()
+        try:
+            feature_matrix, matched_genes = preprocess_for_scfoundation(adata, model_dir)
+            
+            # Generate embeddings using the real model
+            device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+            model = model.to(device)
+            model.eval()
+            
+            # Process in batches to handle memory limitations
+            batch_size = 64
+            n_cells = feature_matrix.shape[0]
+            all_embeddings = []
+            
+            with torch.no_grad():
+                for i in range(0, n_cells, batch_size):
+                    batch_end = min(i + batch_size, n_cells)
+                    batch_data = feature_matrix[i:batch_end]
+                    
+                    # Convert to tensor
+                    X_batch = torch.tensor(batch_data, dtype=torch.float32, device=device)
+                    
+                    try:
+                        # Generate embeddings for this batch
+                        batch_embeddings = model(X_batch)
+                        
+                        # Handle different return types
+                        if isinstance(batch_embeddings, tuple):
+                            batch_embeddings = batch_embeddings[0]
+                        elif isinstance(batch_embeddings, dict):
+                            # Try common keys for embeddings
+                            if 'cell_embeddings' in batch_embeddings:
+                                batch_embeddings = batch_embeddings['cell_embeddings']
+                            elif 'embeddings' in batch_embeddings:
+                                batch_embeddings = batch_embeddings['embeddings']
+                            else:
+                                # Take first value if dict
+                                batch_embeddings = list(batch_embeddings.values())[0]
+                        
+                        batch_embeddings = batch_embeddings.cpu().numpy()
+                        all_embeddings.append(batch_embeddings)
+                        
+                        if i == 0:
+                            print(f"Batch embedding shape: {batch_embeddings.shape}")
+                            
+                    except Exception as e:
+                        print(f"Error during model inference for batch {i//batch_size}: {e}")
+                        print("Falling back to simulated embeddings...")
+                        break
+            
+            # Concatenate all batch embeddings
+            if all_embeddings and len(all_embeddings) == (n_cells + batch_size - 1) // batch_size:
+                embeddings = np.concatenate(all_embeddings, axis=0)
                 
                 # Normalize embeddings
                 embeddings = embeddings / np.linalg.norm(embeddings, axis=1, keepdims=True)
                 
                 print(f"Generated scFoundation embeddings shape: {embeddings.shape}")
                 return embeddings
+            else:
+                print("Incomplete batch processing, falling back to simulated embeddings...")
                 
-            except Exception as e:
-                print(f"Error during model inference: {e}")
-                print("Falling back to simulated embeddings...")
+        except Exception as e:
+            print(f"Error during scFoundation preprocessing or inference: {e}")
+            print("Falling back to simulated embeddings...")
     
     # Fallback: Create simulated embeddings
     print("Using fallback embedding generation")
@@ -160,72 +197,6 @@ def generate_scfoundation_embeddings(adata, model_dir=None):
     
     print(f"Generated simulated embeddings shape: {embeddings.shape}")
     return embeddings
-    
-    try:
-        print(f"Loading scFoundation model from {model_dir}")
-        
-        # Note: This is a placeholder for actual scFoundation model loading
-        # The real implementation would require:
-        # 1. scFoundation model architecture definition
-        # 2. Loading the checkpoint files
-        # 3. Preprocessing the data according to scFoundation requirements
-        # 4. Running inference
-        
-        # For now, create realistic embeddings using PyTorch
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        print(f"Using device: {device}")
-        
-        n_cells = adata.n_obs
-        n_genes = adata.n_vars
-        embedding_dim = 512  # scFoundation embedding dimension
-        
-        # Simulate scFoundation-like processing
-        torch.manual_seed(42)  # For reproducibility
-        
-        # Convert data to tensor
-        if hasattr(adata.X, 'toarray'):
-            X = torch.tensor(adata.X.toarray(), dtype=torch.float32, device=device)
-        else:
-            X = torch.tensor(adata.X, dtype=torch.float32, device=device)
-        
-        # Create a more sophisticated transformation (simulating scFoundation architecture)
-        encoder = torch.nn.Sequential(
-            torch.nn.Linear(n_genes, 2048),
-            torch.nn.ReLU(),
-            torch.nn.BatchNorm1d(2048),
-            torch.nn.Linear(2048, 1024),
-            torch.nn.ReLU(),
-            torch.nn.BatchNorm1d(1024),
-            torch.nn.Linear(1024, embedding_dim)
-        ).to(device)
-        
-        with torch.no_grad():
-            embeddings = encoder(X)
-            # Apply layer normalization
-            embeddings = torch.nn.functional.layer_norm(embeddings, embeddings.shape[1:])
-            # Normalize to unit sphere
-            embeddings = torch.nn.functional.normalize(embeddings, p=2, dim=1)
-            
-            # Convert back to numpy
-            embeddings = embeddings.cpu().numpy()
-        
-        print(f"Generated scFoundation-style embeddings shape: {embeddings.shape}")
-        return embeddings
-        
-    except Exception as e:
-        print(f"Error with scFoundation model: {e}")
-        print("Falling back to simulated embeddings...")
-        
-        # Fallback: Create simulated embeddings
-        n_cells = adata.n_obs
-        embedding_dim = 512
-        
-        np.random.seed(42)
-        embeddings = np.random.normal(0, 1, (n_cells, embedding_dim))
-        embeddings = embeddings / np.linalg.norm(embeddings, axis=1, keepdims=True)
-        
-        print(f"Generated simulated embeddings shape: {embeddings.shape}")
-        return embeddings
 
 def main():
     parser = argparse.ArgumentParser(description='Generate scFoundation embeddings')

@@ -169,7 +169,6 @@ def generate_scgpt_embeddings(adata, model_dir=None):
                     all_values,
                     src_key_padding_mask=src_key_padding_mask,
                     batch_size=64,
-                    batch_labels=None,
                     time_step=0,
                     return_np=True,
                 )
