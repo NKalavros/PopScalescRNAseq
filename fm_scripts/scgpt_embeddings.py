@@ -130,10 +130,8 @@ def generate_scgpt_embeddings(adata, model_dir=None):
                 filter_cell_by_counts=False,
                 normalize_total=1e4,
                 result_normed_key="X_normed",
-                log1p=True,
-                result_log1p_key="X_log1p",
+                log1p=False,
                 subset_hvg=n_hvg,
-                hvg_flavor="seurat_v3",
                 binning=n_bins,
                 result_binned_key="X_binned",
             )
