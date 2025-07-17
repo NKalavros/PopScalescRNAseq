@@ -16,6 +16,8 @@ def load_data(input_path):
     """Load data from .h5ad file"""
     print(f"Loading data from {input_path}")
     adata = ad.read_h5ad(input_path)
+    # Make gene names unique to avoid reindexing errors
+    adata.var_names_make_unique()
     print(f"Data shape: {adata.shape}")
     return adata
 
