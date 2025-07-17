@@ -48,6 +48,13 @@ mkdir -p models
 # Gdrive link: https://drive.google.com/drive/folders/1oWh_-ZRdhtoGQ2Fw24HP41FgLoomVo-y?usp=sharing
 echo "Downloading scGPT model..."
 gdown --id 1oWh_-ZRdhtoGQ2Fw24HP41FgLoomVo-y -O models/scgpt_model.pth
+# Fix up libstdc++ issue
+echo "Fixing libstdc++ issue..."
+mamba install -c conda-forge libstdcxx-ng -y
 
+# Add the library to the LD_LIBRARY_PATH when running this env
+echo "Adding libstdc++ to LD_LIBRARY_PATH..."
+mkdir -p "$FULL_ENV_PATH/etc/conda/activate.d"
+echo "export LD_LIBRARY_PATH=\"$FULL_ENV_PATH/lib:\$LD_LIBRARY_PATH\"" >> "$FULL_ENV_PATH/etc/conda/activate.d/env_vars.sh"
 echo "✅ scGPT environment ready at: $FULL_ENV_PATH"
 echo "To activate: mamba activate $FULL_ENV_PATH"

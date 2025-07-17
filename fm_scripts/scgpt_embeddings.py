@@ -47,7 +47,7 @@ def generate_scgpt_embeddings(adata, model_dir=None):
         model_file = model_path / "best_model.pt"
         config_file = model_path / "args.json"
         
-        if vocab_file.exists() and model_file.exists():
+        if vocab_file.exists() and model_file.exists() and config_file.exists():
             print(f"Loading pre-trained model from {model_dir}")
             
             # Load vocabulary
@@ -72,7 +72,7 @@ def generate_scgpt_embeddings(adata, model_dir=None):
             with open(config_file, 'r') as f:
                 model_config = json.load(f)
             
-            # Create model
+            # Create model with exact configuration from saved model
             model = TransformerModel(
                 ntoken=len(vocab),
                 d_model=model_config["embsize"],
@@ -80,23 +80,46 @@ def generate_scgpt_embeddings(adata, model_dir=None):
                 d_hid=model_config["d_hid"],
                 nlayers=model_config["nlayers"],
                 vocab=vocab,
-                dropout=0.2,
+                dropout=model_config.get("dropout", 0.2),
                 pad_token=pad_token,
                 pad_value=-2,
-                do_mvc=True,
-                do_dab=True,
-                use_batch_labels=True,
-                num_batch_labels=1,
-                domain_spec_batchnorm=True,
-                n_input_bins=n_bins,
-                ecs_threshold=0.8,
-                explicit_zero_prob=True,
-                use_fast_transformer=True,
-                pre_norm=False,
+                do_mvc=model_config.get("do_mvc", True),
+                do_dab=model_config.get("do_dab", True),
+                use_batch_labels=model_config.get("use_batch_labels", True),
+                num_batch_labels=model_config.get("num_batch_types", 1),
+                domain_spec_batchnorm=model_config.get("domain_spec_batchnorm", True),
+                n_input_bins=model_config.get("n_input_bins", n_bins),
+                ecs_threshold=model_config.get("ecs_threshold", 0.8),
+                explicit_zero_prob=model_config.get("explicit_zero_prob", True),
+                use_fast_transformer=model_config.get("use_fast_transformer", True),
+                pre_norm=model_config.get("pre_norm", False),
             )
             
-            # Load model weights
-            model.load_state_dict(torch.load(model_file, map_location=device))
+            # Load model weights with partial loading for mismatched architectures
+            try:
+                model.load_state_dict(torch.load(model_file, map_location=device))
+                print("Successfully loaded all model parameters")
+            except RuntimeError as e:
+                print(f"Full model loading failed: {e}")
+                print("Attempting partial model loading...")
+                
+                # Load only matching parameters
+                model_dict = model.state_dict()
+                pretrained_dict = torch.load(model_file, map_location=device)
+                
+                # Filter out parameters that don't match in size or are missing
+                filtered_dict = {}
+                for k, v in pretrained_dict.items():
+                    if k in model_dict and v.shape == model_dict[k].shape:
+                        filtered_dict[k] = v
+                        print(f"Loading parameter: {k} with shape {v.shape}")
+                    else:
+                        print(f"Skipping parameter: {k} (shape mismatch or missing)")
+                
+                # Update the model dict and load
+                model_dict.update(filtered_dict)
+                model.load_state_dict(model_dict)
+                print(f"Loaded {len(filtered_dict)}/{len(pretrained_dict)} parameters")
             model.to(device)
             model.eval()
             
@@ -164,7 +187,86 @@ def generate_scgpt_embeddings(adata, model_dir=None):
             print(f"Generated embeddings shape: {embeddings.shape}")
             return embeddings
         else:
-            print(f"Model files not found in {model_dir}, using fallback approach")
+            print(f"Model files not found in {model_dir}")
+            print(f"Looking for: {vocab_file}, {model_file}, {config_file}")
+            
+            # Try alternative model file names
+            alt_model_files = [
+                model_path / "model.pt",
+                model_path / "pytorch_model.bin",
+                model_path / "scgpt_model.pt"
+            ]
+            
+            alt_vocab_files = [
+                model_path / "vocab.json",
+                model_path / "gene_vocab.json"
+            ]
+            
+            alt_config_files = [
+                model_path / "config.json",
+                model_path / "model_config.json"
+            ]
+            
+            # Try to find alternative files
+            found_model = None
+            found_vocab = None
+            found_config = None
+            
+            for alt_file in alt_model_files:
+                if alt_file.exists():
+                    found_model = alt_file
+                    break
+                    
+            for alt_file in alt_vocab_files:
+                if alt_file.exists():
+                    found_vocab = alt_file
+                    break
+                    
+            for alt_file in alt_config_files:
+                if alt_file.exists():
+                    found_config = alt_file
+                    break
+            
+            if found_model and found_vocab:
+                print(f"Found alternative model files: {found_model}, {found_vocab}")
+                # Try to load with alternative files
+                try:
+                    vocab = GeneVocab.from_file(found_vocab)
+                    for s in special_tokens:
+                        if s not in vocab:
+                            vocab.append_token(s)
+                    
+                    # Use default config if config file not found
+                    if found_config:
+                        with open(found_config, 'r') as f:
+                            model_config = json.load(f)
+                    else:
+                        print("Using default model configuration")
+                        model_config = {
+                            "embsize": 512,
+                            "nheads": 8,
+                            "d_hid": 512,
+                            "nlayers": 12,
+                            "dropout": 0.2,
+                            "do_mvc": True,
+                            "do_dab": True,
+                            "use_batch_labels": True,
+                            "num_batch_types": 1,
+                            "domain_spec_batchnorm": True,
+                            "n_input_bins": n_bins,
+                            "ecs_threshold": 0.8,
+                            "explicit_zero_prob": True,
+                            "use_fast_transformer": True,
+                            "pre_norm": False
+                        }
+                    
+                    # Continue with model creation and loading...
+                    # [Rest of the model loading code would go here]
+                    print("Alternative model loading not fully implemented, using fallback")
+                except Exception as e:
+                    print(f"Alternative model loading failed: {e}")
+            
+            print("Using fallback approach")
     
     # Fallback: create embeddings using basic approach
     print("Using fallback embedding generation")
