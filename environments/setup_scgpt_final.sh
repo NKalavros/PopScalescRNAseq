@@ -56,5 +56,12 @@ mamba install -c conda-forge libstdcxx-ng -y
 echo "Adding libstdc++ to LD_LIBRARY_PATH..."
 mkdir -p "$FULL_ENV_PATH/etc/conda/activate.d"
 echo "export LD_LIBRARY_PATH=\"$FULL_ENV_PATH/lib:\$LD_LIBRARY_PATH\"" >> "$FULL_ENV_PATH/etc/conda/activate.d/env_vars.sh"
+# Install nvcc
+echo "Installing nvcc..."
+mamba install -c conda-forge cudatoolkit-dev -y
+# Installing gcc
+echo "Installing gcc..."
+ mamba install -c conda-forge gcc_linux-64==11* gxx_linux-64==11* -y# Installing flash-attn
+pip install "flash-attn<1.0.5"
 echo "✅ scGPT environment ready at: $FULL_ENV_PATH"
 echo "To activate: mamba activate $FULL_ENV_PATH"

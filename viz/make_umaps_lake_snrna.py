@@ -54,7 +54,7 @@ sc.pp.pca(adata, n_comps=50, use_highly_variable=True)
 adata.obsm["Unintegrated"] = adata.obsm["X_pca"]  # For scib compatibility
 # Run harmony for quick comparison
 print("Running Harmony...")
-sc.external.pp.harmony_integrate(adata, key='library_id', basis='X_pca', max_iter_harmony=20, verbose=False)
+sc.external.pp.harmony_integrate(adata, key='SampleID', basis='X_pca', max_iter_harmony=20, verbose=False)
 # Quick scib evaluation
 print("Running scib evaluation...")
 import time
@@ -66,7 +66,7 @@ biocons = BioConservation(isolated_labels=False)
 start = time.time()
 bm = Benchmarker(
     adata,
-    batch_key="library_id",
+    batch_key="SampleID",
     label_key="cell_type",
     embedding_obsm_keys=["Unintegrated",'X_pca_harmony', "X_scGPT_PCA",'X_scimilarity_PCA', "X_Geneformer_PCA"],
     pre_integrated_embedding_obsm_key="X_pca",

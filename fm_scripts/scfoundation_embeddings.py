@@ -99,6 +99,9 @@ def main():
     
     if gexpr_feature.shape[1]<19264:
         print('covert gene feature into 19264')
+        mean_expr = gexpr_feature.mean(axis=0)
+        top_genes = mean_expr.nlargest(3000).index
+        gexpr_feature = gexpr_feature[:,top_genes]
         gexpr_feature, to_fill_columns,var = main_gene_selection(gexpr_feature,gene_list)
         assert gexpr_feature.shape[1]>=19264
     # What if it is bigger?
@@ -107,7 +110,7 @@ def main():
         # Take the top expressed genes (by mean)
         mean_expr = gexpr_feature.mean(axis=0)
         top_genes = mean_expr.nlargest(3000).index
-        gexpr_feature = gexpr_feature[top_genes]
+        gexpr_feature = gexpr_feature[:,top_genes]
         gexpr_feature, to_fill_columns,var = main_gene_selection(gexpr_feature,gene_list)
     else:
         gexpr_feature, to_fill_columns,var = main_gene_selection(gexpr_feature,gene_list)
@@ -118,8 +121,6 @@ def main():
         sc.pp.log1p(adata)
         gexpr_feature = pd.DataFrame(adata.X,index=adata.obs_names,columns=adata.var_names)
 
-    if args.demo:
-        gexpr_feature = gexpr_feature.iloc[:10,:]
     print(gexpr_feature.shape)
 
     #Load model
