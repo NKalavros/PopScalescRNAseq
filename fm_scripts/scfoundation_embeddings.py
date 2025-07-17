@@ -136,6 +136,10 @@ def main():
     pretrainmodel,pretrainconfig = load_model_frommmf(ckpt_path,key)
     pretrainmodel.eval()
 
+    # Add bounds checking for gene IDs
+    max_gene_id = getattr(pretrainmodel.token_emb, 'num_embeddings', 19266) - 1
+    print(f"Model supports gene IDs up to: {max_gene_id}")
+
     geneexpemb=[]
     batchcontainer = []
     strname = os.path.join(args.save_path, args.task_name +'_'+ args.ckpt_name +"_"+ args.input_type + '_' + args.output_type + '_embedding_' + args.tgthighres + '_resolution.npy')
@@ -154,7 +158,8 @@ def main():
                     raise ValueError('pre_normalized must be T or F')
                 tmpdata = (gexpr_feature.iloc[i,:]).tolist()
                 pretrain_gene_x = torch.tensor(tmpdata+[totalcount,totalcount]).unsqueeze(0).cuda()
-                data_gene_ids = torch.arange(19266, device=pretrain_gene_x.device).repeat(pretrain_gene_x.shape[0], 1)
+                # Fix: Ensure gene IDs are within valid range
+                data_gene_ids = torch.arange(min(19266, max_gene_id + 1), device=pretrain_gene_x.device).repeat(pretrain_gene_x.shape[0], 1)
             
             #Single cell
             elif args.input_type == 'singlecell':
@@ -182,16 +187,25 @@ def main():
                     pretrain_gene_x = torch.tensor(tmpdata+[float(args.tgthighres[1:]),np.log10(totalcount)]).unsqueeze(0).cuda()
                 else:
                     raise ValueError('tgthighres must be start with f, a or t')
-                data_gene_ids = torch.arange(19266, device=pretrain_gene_x.device).repeat(pretrain_gene_x.shape[0], 1)
+                # Fix: Ensure gene IDs are within valid range
+                data_gene_ids = torch.arange(min(19266, max_gene_id + 1), device=pretrain_gene_x.device).repeat(pretrain_gene_x.shape[0], 1)
 
             value_labels = pretrain_gene_x > 0
             x, x_padding = gatherData(pretrain_gene_x, value_labels, pretrainconfig['pad_token_id'])
 
             #Cell embedding
             if args.output_type=='cell':
-                # use the max gene‐ID as pad ID so we never index out of range
-                pad_id = int(data_gene_ids.max())
+                # Fix: Use safe pad ID that's within bounds
+                pad_id = min(int(data_gene_ids.max()), max_gene_id)
+                print(f"Using pad_id: {pad_id}, max allowed: {max_gene_id}")
+                
                 position_gene_ids, _ = gatherData(data_gene_ids, value_labels, pad_id)
+                
+                # Add bounds checking before embedding lookup
+                if position_gene_ids.max() > max_gene_id:
+                    print(f"Warning: Gene IDs exceed model capacity. Clamping {position_gene_ids.max()} to {max_gene_id}")
+                    position_gene_ids = torch.clamp(position_gene_ids, 0, max_gene_id)
+                
                 x = pretrainmodel.token_emb(torch.unsqueeze(x, 2).long(), output_weight = 0)
                 position_emb = pretrainmodel.pos_emb(position_gene_ids)
                 x += position_emb
