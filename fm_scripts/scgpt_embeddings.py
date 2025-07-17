@@ -164,11 +164,15 @@ def generate_scgpt_embeddings(adata, model_dir=None):
             src_key_padding_mask = all_gene_ids.eq(vocab[pad_token])
             
             with torch.no_grad():
+                # Create batch labels (all cells belong to batch 0)
+                batch_labels = torch.zeros(all_gene_ids.shape[0], dtype=torch.long, device=device)
+                
                 embeddings = model.encode_batch(
                     all_gene_ids,
                     all_values,
                     src_key_padding_mask=src_key_padding_mask,
                     batch_size=64,
+                    batch_labels=batch_labels,
                     time_step=0,
                     return_np=True,
                 )

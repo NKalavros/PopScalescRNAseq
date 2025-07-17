@@ -132,12 +132,12 @@ def load_scfoundation_model(model_dir, repo_dir=None):
         print(f"Error loading scFoundation model: {e}")
         return None, None
 
-def preprocess_for_scfoundation(adata, model_dir):
+def preprocess_for_scfoundation(adata, model_dir, repo_dir='/gpfs/scratch/nk4167/miniconda/envs/scFoundation_env/scFoundation'):
     """Preprocess data according to scFoundation requirements"""
     print("Preprocessing data for scFoundation...")
     
-    # Load gene index file
-    gene_index_file = os.path.join(model_dir, "OS_scRNA_gene_index.19264.tsv")
+    # Load gene index file from the repository
+    gene_index_file = os.path.join(repo_dir, "OS_scRNA_gene_index.19264.tsv")
     
     if not os.path.exists(gene_index_file):
         print(f"Gene index file not found: {gene_index_file}")
