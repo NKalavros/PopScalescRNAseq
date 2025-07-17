@@ -160,23 +160,44 @@ def generate_scgpt_embeddings(adata, model_dir=None):
             )
             
             # Generate embeddings
-            all_gene_ids = torch.tensor(tokenized_data["genes"], dtype=torch.long, device=device)
-            all_values = torch.tensor(tokenized_data["values"], dtype=torch.float, device=device)
+            all_gene_ids = tokenized_data["genes"].clone().detach().to(device).long()
+            all_values = tokenized_data["values"].clone().detach().to(device)
+            
+            # Convert to half precision if model uses flash attention
+            if hasattr(model, 'use_fast_transformer') and model.use_fast_transformer:
+                all_values = all_values.half()  # Convert to float16
+            
             src_key_padding_mask = all_gene_ids.eq(vocab[pad_token])
             
             with torch.no_grad():
                 # Create batch labels (all cells belong to batch 0)
                 batch_labels = torch.zeros(all_gene_ids.shape[0], dtype=torch.long, device=device)
                 
-                embeddings = model.encode_batch(
-                    all_gene_ids,
-                    all_values,
-                    src_key_padding_mask=src_key_padding_mask,
-                    batch_size=64,
-                    batch_labels=batch_labels,
-                    time_step=0,
-                    return_np=True,
-                )
+                try:
+                    embeddings = model.encode_batch(
+                        all_gene_ids,
+                        all_values,
+                        src_key_padding_mask=src_key_padding_mask,
+                        batch_size=64,
+                        batch_labels=batch_labels,
+                        time_step=0,
+                        return_np=True,
+                    )
+                except AssertionError as e:
+                    if "dtype" in str(e) and "float16" in str(e):
+                        print("Flash attention requires half precision, converting...")
+                        all_values = all_values.half()
+                        embeddings = model.encode_batch(
+                            all_gene_ids,
+                            all_values,
+                            src_key_padding_mask=src_key_padding_mask,
+                            batch_size=64,
+                            batch_labels=batch_labels,
+                            time_step=0,
+                            return_np=True,
+                        )
+                    else:
+                        raise e
             
             # Normalize embeddings
             embeddings = embeddings / np.linalg.norm(embeddings, axis=1, keepdims=True)
