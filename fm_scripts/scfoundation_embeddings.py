@@ -272,26 +272,15 @@ def generate_scfoundation_embeddings(adata, model_dir=None, repo_dir=None):
                             print("Using model.encode...")
                             batch_embeddings = model.encode(X_batch_binned)
                         
-                        # Strategy 2: Try encoder-only inference
-                        elif hasattr(model, 'encoder'):
-                            print("Using model.encoder directly...")
-                            try:
-                                # Try different encoder interfaces
-                                if hasattr(model.encoder, 'forward'):
-                                    # Try minimal encoder call
-                                    batch_embeddings = model.encoder(X_batch_binned)
-                                else:
-                                    # Try calling encoder as function
-                                    batch_embeddings = model.encoder(X_batch_binned)
-                            except Exception as enc_e:
-                                print(f"Encoder call failed: {enc_e}")
-                                
-                                # Try with embeddings layer first
-                                if hasattr(model, 'embeddings') or hasattr(model, 'embed_tokens'):
-                                    embed_layer = getattr(model, 'embeddings', getattr(model, 'embed_tokens', None))
-                                    if embed_layer:
-                                        embedded = embed_layer(X_batch_binned)
-                                        batch_embeddings = model.encoder(embedded)
+                        # Strategy 2: Try encoder-only inference via embed_tokens → encoder
+                        elif hasattr(model, 'encoder') and (hasattr(model, 'embeddings') or hasattr(model, 'embed_tokens')):
+                            print("Using embeddings layer followed by encoder with padding mask for dtype consistency...")
+                            # pick up the correct embedding layer
+                            embed_layer = getattr(model, 'embeddings', getattr(model, 'embed_tokens', None))
+                            # embedded: (batch, seq, hidden) float32
+                            embedded = embed_layer(X_batch_binned)
+                            # pass through encoder with padding mask to avoid missing args
+                            batch_embeddings = model.encoder(embedded, src_key_padding_mask=padding_mask)
                         
                         # Strategy 3: Full model call with proper parameters
                         if batch_embeddings is None:
