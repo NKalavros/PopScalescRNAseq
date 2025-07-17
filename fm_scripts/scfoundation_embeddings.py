@@ -183,32 +183,30 @@ def generate_embeddings_encoder_only(encoder, expression_matrix, gene_names, con
             
             for cell_idx in range(batch_expr.shape[0]):
                 cell_expr = batch_expr[cell_idx]
-                
+
                 # Find non-zero genes
                 nonzero_mask = cell_expr > 0
                 nonzero_indices = np.where(nonzero_mask)[0]
-                
+
                 if len(nonzero_indices) == 0:
-                    # Handle cells with no expression
                     batch_embeddings.append(np.zeros(config.get('hidden_size', 512)))
                     continue
-                
-                # Handle cells with very few expressed genes
-                if len(nonzero_indices) < 10:
-                    # Pad to minimum sequence length to avoid transformer issues
-                    min_genes = 10
-                    padding_needed = min_genes - len(nonzero_indices)
-                    # Add some very small non-zero values for padding genes
-                    nonzero_indices = np.concatenate([nonzero_indices, np.arange(padding_needed)])
-                    nonzero_expr = np.concatenate([nonzero_expr, np.full(padding_needed, 1e-6)])
-                
-                # Extract non-zero expressions and their indices
+
+                # Extract non-zero expression values
                 nonzero_expr = cell_expr[nonzero_indices]
-                
+
+                # Pad very small sequences to avoid transformer requiring a minimum length
+                min_genes = 10
+                if nonzero_expr.shape[0] < min_genes:
+                    pad_n = min_genes - nonzero_expr.shape[0]
+                    # pad indices with zeros, pad expr with zeros
+                    nonzero_indices = np.concatenate([nonzero_indices, np.zeros(pad_n, dtype=int)])
+                    nonzero_expr = np.concatenate([nonzero_expr, np.zeros(pad_n, dtype=nonzero_expr.dtype)])
+
                 # Convert to tensors
                 expr_tensor = torch.tensor(nonzero_expr, dtype=torch.float32, device=device).unsqueeze(0)
                 indices_tensor = torch.tensor(nonzero_indices, dtype=torch.long, device=device).unsqueeze(0)
-                
+
                 try:
                     # Create embeddings for non-zero genes only
                     # This follows xTrimoGene's efficient encoder design
@@ -236,34 +234,23 @@ def generate_embeddings_encoder_only(encoder, expression_matrix, gene_names, con
                         
                         # Apply encoder layers if available
                         if hasattr(encoder, 'layers') or hasattr(encoder, 'encoder_layers'):
-                            # Create padding mask (all positions are valid for non-zero genes)
+                            # build a padding mask (all False since we padded explicitly)
                             seq_len = encoder_output.size(1)
                             padding_mask = torch.zeros(1, seq_len, dtype=torch.bool, device=device)
-                            
-                            # Get layers
-                            layers = getattr(encoder, 'layers', getattr(encoder, 'encoder_layers', []))
-                            
+
+                            layers = getattr(encoder, 'layers',
+                                             getattr(encoder, 'encoder_layers', []))
                             for layer in layers:
                                 try:
-                                    # Try with padding mask first
-                                    encoder_output = layer(encoder_output, src_key_padding_mask=padding_mask)
+                                    # first try the “padding_mask” kwarg
+                                    encoder_output = layer(encoder_output, padding_mask=padding_mask)
                                 except TypeError:
-                                    # If that fails, try without padding mask
                                     try:
+                                        # then try PyTorch naming
+                                        encoder_output = layer(encoder_output, src_key_padding_mask=padding_mask)
+                                    except TypeError:
+                                        # fallback to no mask argument
                                         encoder_output = layer(encoder_output)
-                                    except Exception as layer_e:
-                                        print(f"Layer forward pass failed: {layer_e}")
-                                        # Try alternative approaches
-                                        if hasattr(layer, 'self_attn'):
-                                            # Direct attention computation
-                                            attn_output, _ = layer.self_attn(encoder_output, encoder_output, encoder_output)
-                                            encoder_output = layer.dropout(attn_output) + encoder_output
-                                            encoder_output = layer.norm1(encoder_output)
-                                            ff_output = layer.linear2(layer.dropout(layer.activation(layer.linear1(encoder_output))))
-                                            encoder_output = layer.dropout(ff_output) + encoder_output
-                                            encoder_output = layer.norm2(encoder_output)
-                                        else:
-                                            raise layer_e
                         
                         # Pool to get cell embedding (mean pooling over genes)
                         cell_embedding = encoder_output.mean(dim=1).squeeze(0)  # (hidden_dim,)
