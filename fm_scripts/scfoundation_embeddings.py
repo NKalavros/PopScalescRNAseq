@@ -236,82 +236,130 @@ def generate_scfoundation_embeddings(adata, model_dir=None, repo_dir=None):
                         batch_size_actual = batch_data.shape[0]
                         gene_dim = batch_data.shape[1]
                         
-                        # Convert to integer bins (scFoundation expects binned data)
-                        # The model config shows bin_num: 100, so we need to bin the data
-                        X_batch_binned = torch.clamp(torch.round(X_batch * 100), 0, 99).long()
+                        # Handle data format: scFoundation expects raw counts, but we have log counts
+                        # Convert log counts back to approximate raw counts for binning
+                        if X_batch.max() < 20:  # Likely log counts
+                            print("Converting log counts to raw counts for scFoundation...")
+                            # Convert log1p back to raw counts: exp(log1p(x)) - 1 = exp(x) - 1
+                            X_batch_raw = torch.expm1(X_batch)  # exp(x) - 1
+                            X_batch_raw = torch.clamp(X_batch_raw, min=0)  # Ensure non-negative
+                        else:
+                            X_batch_raw = X_batch
                         
-                        # Create padding mask (True where data should be ignored)
+                        # Bin the data according to scFoundation's auto_bin strategy
+                        # Based on config: bin_num=100, bin_type='auto_bin'
+                        max_val = X_batch_raw.max()
+                        if max_val > 0:
+                            # Scale to 0-99 range
+                            X_batch_binned = torch.clamp(
+                                torch.round(X_batch_raw * 99 / max_val), 0, 99
+                            ).long()
+                        else:
+                            X_batch_binned = torch.zeros_like(X_batch_raw, dtype=torch.long)
+                        
+                        # Create masks - use proper dtypes for scFoundation
                         padding_mask = torch.zeros(batch_size_actual, gene_dim, dtype=torch.bool, device=device)
+                        position_ids = torch.arange(gene_dim, device=device).unsqueeze(0).expand(batch_size_actual, -1).long()
                         
-                        # Create position encodings
-                        position_ids = torch.arange(gene_dim, device=device).unsqueeze(0).expand(batch_size_actual, -1)
+                        # Try different inference approaches
+                        batch_embeddings = None
                         
-                        # For scFoundation MAE model, we need to call it in inference mode
-                        # The model expects specific inputs for embedding generation
-                        try:
-                            # Try the model's embedding generation method if available
-                            if hasattr(model, 'get_cell_embedding'):
-                                batch_embeddings = model.get_cell_embedding(X_batch_binned, padding_mask)
-                            elif hasattr(model, 'encode'):
-                                batch_embeddings = model.encode(X_batch_binned, padding_mask)
-                            else:
-                                # Fallback: call model directly with proper parameters
-                                # Based on scFoundation's MAE architecture
+                        # Strategy 1: Try model's built-in embedding methods
+                        if hasattr(model, 'get_cell_embedding'):
+                            print("Using model.get_cell_embedding...")
+                            batch_embeddings = model.get_cell_embedding(X_batch_binned)
+                        elif hasattr(model, 'encode'):
+                            print("Using model.encode...")
+                            batch_embeddings = model.encode(X_batch_binned)
+                        
+                        # Strategy 2: Try encoder-only inference
+                        elif hasattr(model, 'encoder'):
+                            print("Using model.encoder directly...")
+                            try:
+                                # Try different encoder interfaces
+                                if hasattr(model.encoder, 'forward'):
+                                    # Try minimal encoder call
+                                    batch_embeddings = model.encoder(X_batch_binned)
+                                else:
+                                    # Try calling encoder as function
+                                    batch_embeddings = model.encoder(X_batch_binned)
+                            except Exception as enc_e:
+                                print(f"Encoder call failed: {enc_e}")
+                                
+                                # Try with embeddings layer first
+                                if hasattr(model, 'embeddings') or hasattr(model, 'embed_tokens'):
+                                    embed_layer = getattr(model, 'embeddings', getattr(model, 'embed_tokens', None))
+                                    if embed_layer:
+                                        embedded = embed_layer(X_batch_binned)
+                                        batch_embeddings = model.encoder(embedded)
+                        
+                        # Strategy 3: Full model call with proper parameters
+                        if batch_embeddings is None:
+                            print("Using full model call...")
+                            try:
+                                # Prepare all required inputs with correct dtypes
+                                encoder_labels = torch.zeros_like(X_batch_binned, dtype=torch.long)
+                                mask_labels = torch.zeros_like(X_batch_binned, dtype=torch.long)
+                                
                                 output = model(
-                                    X_batch_binned,
-                                    padding_label=padding_mask,
+                                    X_batch_binned,  # input_ids (Long)
+                                    padding_label=padding_mask.long(),  # Convert bool to long
                                     encoder_position_gene_ids=position_ids,
-                                    encoder_labels=torch.zeros_like(X_batch_binned),
+                                    encoder_labels=encoder_labels,
                                     decoder_data=X_batch_binned,
-                                    mask_gene_name=padding_mask,
-                                    mask_labels=torch.zeros_like(X_batch_binned),
+                                    mask_gene_name=padding_mask.long(),
+                                    mask_labels=mask_labels,
                                     decoder_position_gene_ids=position_ids,
-                                    decoder_data_padding_labels=padding_mask
+                                    decoder_data_padding_labels=padding_mask.long()
                                 )
                                 
                                 # Extract embeddings from output
                                 if isinstance(output, dict):
-                                    if 'encoder_output' in output:
-                                        batch_embeddings = output['encoder_output']
-                                    elif 'embeddings' in output:
-                                        batch_embeddings = output['embeddings']
-                                    elif 'cell_embeddings' in output:
-                                        batch_embeddings = output['cell_embeddings']
-                                    else:
-                                        # Take the first output that looks like embeddings
+                                    for key in ['encoder_output', 'embeddings', 'cell_embeddings', 'hidden_states']:
+                                        if key in output:
+                                            batch_embeddings = output[key]
+                                            break
+                                    
+                                    # If no standard key, find tensor output
+                                    if batch_embeddings is None:
                                         for key, value in output.items():
                                             if torch.is_tensor(value) and len(value.shape) >= 2:
                                                 batch_embeddings = value
+                                                print(f"Using output key: {key}")
                                                 break
-                                else:
+                                elif torch.is_tensor(output):
                                     batch_embeddings = output
-                            
-                        except Exception as inner_e:
-                            print(f"Primary inference failed: {inner_e}")
-                            
-                            # Try simplified approach without decoder parameters
-                            print("Trying simplified inference...")
-                            batch_embeddings = model.encoder(X_batch_binned, src_key_padding_mask=padding_mask)
-                            
-                            # If encoder returns a tuple, take the first element
-                            if isinstance(batch_embeddings, tuple):
-                                batch_embeddings = batch_embeddings[0]
+                                elif isinstance(output, (list, tuple)):
+                                    batch_embeddings = output[0]
+                                    
+                            except Exception as full_e:
+                                print(f"Full model call failed: {full_e}")
+                                raise full_e
                         
-                        # Post-process embeddings
-                        if torch.is_tensor(batch_embeddings):
-                            # If output is 3D (batch, seq, dim), pool to 2D (batch, dim)
-                            if len(batch_embeddings.shape) == 3:
-                                # Use mean pooling across sequence dimension
-                                batch_embeddings = batch_embeddings.mean(dim=1)
-                            elif len(batch_embeddings.shape) == 2:
-                                # Already correct shape
-                                pass
-                            else:
-                                raise ValueError(f"Unexpected embedding shape: {batch_embeddings.shape}")
-                            
-                            batch_embeddings = batch_embeddings.cpu().numpy()
-                        else:
+                        # Validate and process embeddings
+                        if batch_embeddings is None:
+                            raise ValueError("No valid embeddings generated from model")
+                        
+                        # Handle different output shapes and ensure proper format
+                        if not torch.is_tensor(batch_embeddings):
                             raise ValueError(f"Expected tensor, got {type(batch_embeddings)}")
+                        
+                        # Convert to proper dtype if needed
+                        if batch_embeddings.dtype != torch.float32:
+                            batch_embeddings = batch_embeddings.float()
+                        
+                        # Handle 3D output (batch, seq, dim) -> (batch, dim)
+                        if len(batch_embeddings.shape) == 3:
+                            # Use mean pooling across sequence dimension
+                            batch_embeddings = batch_embeddings.mean(dim=1)
+                        elif len(batch_embeddings.shape) == 2:
+                            # Already correct shape (batch, dim)
+                            pass
+                        else:
+                            raise ValueError(f"Unexpected embedding shape: {batch_embeddings.shape}")
+                        
+                        # Convert to numpy
+                        batch_embeddings = batch_embeddings.cpu().numpy()
                         
                         all_embeddings.append(batch_embeddings)
                         
