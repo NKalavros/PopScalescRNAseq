@@ -215,7 +215,7 @@ def main():
                     print(f"Warning: Gene IDs exceed model capacity. Clamping {position_gene_ids.max()} to {max_gene_id}")
                     position_gene_ids = torch.clamp(position_gene_ids, 0, max_gene_id)
                 
-                x = pretrainmodel.token_emb(torch.unsqueeze(x, 2).long(), output_weight = 0)
+                x = pretrainmodel.token_emb(torch.unsqueeze(x, 2).float(), output_weight = 0)
                 position_emb = pretrainmodel.pos_emb(position_gene_ids)
                 x += position_emb
                 geneemb = pretrainmodel.encoder(x,x_padding)
