@@ -189,7 +189,7 @@ def main():
             #Cell embedding
             if args.output_type=='cell':
                 position_gene_ids, _ = gatherData(data_gene_ids, value_labels, pretrainconfig['pad_token_id'])
-                x = pretrainmodel.token_emb(torch.unsqueeze(x, 2).float(), output_weight = 0)
+                x = pretrainmodel.token_emb(torch.unsqueeze(x, 2).long(), output_weight = 0)
                 position_emb = pretrainmodel.pos_emb(position_gene_ids)
                 x += position_emb
                 geneemb = pretrainmodel.encoder(x,x_padding)
