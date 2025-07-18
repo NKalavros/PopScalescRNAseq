@@ -15,6 +15,10 @@ seurat_obj <- UpdateSeuratObject(seurat_obj)
 seur_logccounts <- GetAssayData(seurat_obj, slot = 'data')
 # Save with fastMatMR
 write_fmm(seur_logccounts, 'logcounts.mtx')
+# Write rownames and colnames
+write.table(rownames(seur_logccounts), 'genes.txt', row.names = FALSE, col.names = FALSE, quote = FALSE)
+write.table(colnames(seur_logccounts), 'barcodes.txt', row.names = FALSE, col.names = FALSE, quote = FALSE)
+# Save metadata
 write.csv(seurat_obj@meta.data, 'metadata.csv')
 "
 # Convert to h5ad format

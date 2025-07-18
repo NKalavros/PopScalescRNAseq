@@ -27,6 +27,14 @@ echo "  mamba activate $FULL_ENV_PATH"
 echo "  [then run the pip install commands below]"
 echo ""
 
+
+# Add the libraries to the conda env setup
+echo "Adding libstdc++ to LD_LIBRARY_PATH..."
+mkdir -p "$FULL_ENV_PATH/etc/conda/activate.d"
+echo "export LD_LIBRARY_PATH=\"$FULL_ENV_PATH/lib:\$LD_LIBRARY_PATH\"" >> "$FULL_ENV_PATH/etc/conda/activate.d/env_vars.sh"
+
+
+
 # Install PyTorch with CUDA 12.1 (compatible with V100/A100)
 echo "Installing PyTorch with CUDA 12.1..."
 pip install torch==2.1.0+cu121 torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
@@ -43,19 +51,21 @@ pip install transformers datasets accelerate hf_transfer
 echo "Installing single-cell packages..."
 pip install anndata==0.8.0 scanpy==1.8.2
 
-# Initialize git-lfs
-echo "Initializing git-lfs..."
-git lfs install
+pip install ipython mygene
 
 # Clone and install Geneformer
 echo "Cloning Geneformer repository..."
 cd "$FULL_ENV_PATH"
 git clone https://huggingface.co/ctheodoris/Geneformer
 cd Geneformer
-
+# Install gcc g++ and libstdc++-devel for compilation
+echo "Installing system dependencies..."
+mamba install -c conda-forge gcc_linux-64 gxx_linux-64 libstdcxx-ng -y
 echo "Installing Geneformer package..."
 pip install .
-
+# Initialize git-lfs
+echo "Initializing git-lfs..."
+git lfs install
 # Test the installation
 echo "Testing installation..."
 python -c "
