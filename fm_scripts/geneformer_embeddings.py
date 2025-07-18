@@ -52,6 +52,7 @@ else:
     adata = sc.read_h5ad(input)
 # Convert gene names to ensembl
 adata.var_names_make_unique()
+sc.pp.filter_genes(adata, min_cells=10)  # Filter genes expressed in at least 3 cells
 # Convert gene names to Ensembl IDs
 mg = mygene.MyGeneInfo()
 
@@ -85,6 +86,8 @@ print(f"Genes with Ensembl IDs: {sum(adata.var['ensembl_id'].notna())}/{len(adat
 adata.obs['n_counts'] = adata.X.sum(axis=1)
 # Make a directory for the embeddings if it doesn't exist
 os.makedirs("geneformer_tokenizer", exist_ok=True)
+print('Tokenizing data...')
+print('Data shape:', adata.shape)
 # Write file there
 adata.write_h5ad("geneformer_tokenizer/geneformer_tokenized.h5ad")
 # Save the new anndata there
@@ -98,18 +101,18 @@ tk.tokenize_data("geneformer_tokenizer/",
 
 torch.cuda.empty_cache()
 
-n_cells = 500
+n_cells = adata.n_obs
 # 0 for last layer, -1 for second to last
 layer = -1
 model_version='V2' # Hardcoding this
 # initiate EmbExtractor
 embex = EmbExtractor(model_type="Pretrained",
                      num_classes=0,
-                     max_ncells=n_cells,
+                     max_ncells=None,
                      emb_mode='cell',
                      emb_layer=layer,
                      forward_batch_size=20,
-                     nproc=int(os.environ.get('SLURM_CPUS_PER_TASK', '1')),
+                     nproc=int(os.environ.get('SLURM_CPUS_PER_TASK', '4')),
                       )
 huggingface_hub.login(token=os.environ.get('HUGGINGFACE_TOKEN', ''))
 

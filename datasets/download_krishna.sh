@@ -59,5 +59,4 @@ adata.var_names = [ensembl_to_symbol.get(gene, gene) for gene in adata.var_names
 # Remove genes without a symbol
 adata = adata[:, adata.var_names.notna()].copy()
 # Save the AnnData object
-adata.write_h5ad('data.h5ad')
-"
+adata.write_h5ad('data.h5ad')"
