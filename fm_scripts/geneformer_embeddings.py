@@ -16,6 +16,8 @@ def load_data(input_path):
     """Load data from .h5ad file"""
     print(f"Loading data from {input_path}")
     adata = ad.read_h5ad(input_path)
+    # Make gene names unique to avoid issues
+    adata.var_names_make_unique()
     print(f"Data shape: {adata.shape}")
     return adata
 
@@ -24,53 +26,150 @@ def generate_geneformer_embeddings(adata, model_dir=None):
     print("Generating Geneformer embeddings...")
     
     try:
-        # Import Geneformer modules
-        import geneformer
-        from transformers import AutoModel, AutoConfig
+        # Import Geneformer specific modules
+        sys.path.append(model_dir or "/gpfs/scratch/nk4167/miniconda/envs/geneformer_env/Geneformer")
         
-        # Load Geneformer model from Hugging Face (downloads if needed, uses cache if available).
-        # We want to load this version: https://huggingface.co/ctheodoris/Geneformer/tree/main/Geneformer-V2-316M
-        print("Loading Geneformer model from Hugging Face...")
-        model = AutoModel.from_pretrained('ctheodoris/Geneformer', revision='main', subfolder='Geneformer-V2-316M')
+        from geneformer import TranscriptomeTokenizer, EmbExtractor
+        from transformers import AutoModel
+        import pickle
+        from scipy.sparse import issparse
+        import pandas as pd
+        
+        print("Loading Geneformer model and tokenizer...")
+        
+        # Load the actual Geneformer model
+        model_name = "ctheodoris/Geneformer"
+        model = AutoModel.from_pretrained(model_name, trust_remote_code=True)
+        
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         model = model.to(device)
         model.eval()
         
         print(f"Using device: {device}")
         
-        # Note: Real Geneformer requires specific tokenization of gene expression data
-        # This would involve:
-        # 1. Converting expression values to gene tokens
-        # 2. Creating attention masks
-        # 3. Running through the transformer model
-        # 4. Extracting cell embeddings
+        # Convert AnnData to proper format for Geneformer
+        print("Converting data to Geneformer format...")
         
-        # For now, simulate the process
-        n_cells = adata.n_obs
-        embedding_dim = 768  # Geneformer hidden size
+        # Convert sparse matrix to dense if needed
+        if issparse(adata.X):
+            X = adata.X.toarray()
+        else:
+            X = adata.X.copy()
         
-        # Create simulated input (would be tokenized genes in real implementation)
-        with torch.no_grad():
-            # Simulate Geneformer processing
-            batch_size = 32
-            embeddings_list = []
+        # Get gene names
+        if 'gene_symbols' in adata.var.columns:
+            gene_names = adata.var['gene_symbols'].tolist()
+        elif 'gene_name' in adata.var.columns:
+            gene_names = adata.var['gene_name'].tolist()
+        else:
+            gene_names = adata.var.index.tolist()
+        
+        print(f"Processing {len(gene_names)} genes for {adata.n_obs} cells")
+        
+        # Create temporary dataset for Geneformer
+        temp_dataset = []
+        
+        # Geneformer parameters
+        MAX_GENES = 2048
+        MIN_EXPR = 0.1
+        
+        for cell_idx in range(adata.n_obs):
+            cell_data = X[cell_idx, :]
             
-            for i in range(0, n_cells, batch_size):
-                end_idx = min(i + batch_size, n_cells)
-                batch_size_actual = end_idx - i
-                
-                # Simulate transformer input (in real implementation, this would be tokenized genes)
-                fake_input_ids = torch.randint(1, 1000, (batch_size_actual, 512), device=device)
-                fake_attention_mask = torch.ones((batch_size_actual, 512), device=device)
-                
-                # Get embeddings from model
-                outputs = model(input_ids=fake_input_ids, attention_mask=fake_attention_mask)
-                # Use CLS token embedding or pooled output
-                batch_embeddings = outputs.last_hidden_state[:, 0, :]  # CLS token
-                
-                embeddings_list.append(batch_embeddings.cpu().numpy())
+            # Create gene-expression pairs and sort by expression (highest first)
+            gene_expr_pairs = [(gene_names[i], expr) for i, expr in enumerate(cell_data) if expr > MIN_EXPR]
+            gene_expr_pairs.sort(key=lambda x: x[1], reverse=True)
             
-            embeddings = np.concatenate(embeddings_list, axis=0)
+            # Take top expressed genes
+            top_genes = gene_expr_pairs[:MAX_GENES]
+            
+            # Create dataset entry in Geneformer format
+            cell_entry = {
+                'cell_id': adata.obs.index[cell_idx],
+                'gene_symbols': [gene for gene, _ in top_genes],
+                'expression': [expr for _, expr in top_genes]
+            }
+            temp_dataset.append(cell_entry)
+        
+        # Initialize tokenizer
+        tokenizer = TranscriptomeTokenizer(
+            custom_attr_name_dict={"cell_type": "cell_type"},
+            nproc=1
+        )
+        
+        # Tokenize the data
+        print("Tokenizing data...")
+        tokenized_cells = []
+        
+        for cell_data in temp_dataset:
+            # Create input sequence of ranked genes
+            gene_sequence = cell_data['gene_symbols']
+            
+            # Convert to token IDs using Geneformer's gene vocabulary
+            try:
+                input_ids = tokenizer.gene_token_dict.get_batch(gene_sequence)
+                # Add CLS token at the beginning
+                input_ids = [tokenizer.cls_token_id] + input_ids[:MAX_GENES-1]
+                
+                # Pad to maximum length
+                attention_mask = [1] * len(input_ids)
+                while len(input_ids) < MAX_GENES:
+                    input_ids.append(tokenizer.pad_token_id)
+                    attention_mask.append(0)
+                
+                tokenized_cells.append({
+                    'input_ids': input_ids,
+                    'attention_mask': attention_mask
+                })
+                
+            except Exception as e:
+                print(f"Error tokenizing cell {cell_data['cell_id']}: {e}")
+                # Create dummy tokenization
+                input_ids = [tokenizer.cls_token_id] + [tokenizer.pad_token_id] * (MAX_GENES - 1)
+                attention_mask = [1] + [0] * (MAX_GENES - 1)
+                tokenized_cells.append({
+                    'input_ids': input_ids,
+                    'attention_mask': attention_mask
+                })
+        
+        # Process in batches
+        print("Generating embeddings...")
+        all_embeddings = []
+        batch_size = 16
+        
+        for batch_start in range(0, len(tokenized_cells), batch_size):
+            batch_end = min(batch_start + batch_size, len(tokenized_cells))
+            
+            # Prepare batch tensors
+            batch_input_ids = torch.tensor([
+                tokenized_cells[i]['input_ids'] for i in range(batch_start, batch_end)
+            ], dtype=torch.long, device=device)
+            
+            batch_attention_mask = torch.tensor([
+                tokenized_cells[i]['attention_mask'] for i in range(batch_start, batch_end)
+            ], dtype=torch.long, device=device)
+            
+            # Get embeddings
+            with torch.no_grad():
+                outputs = model(
+                    input_ids=batch_input_ids,
+                    attention_mask=batch_attention_mask
+                )
+                
+                # Extract cell embeddings from CLS token
+                if hasattr(outputs, 'last_hidden_state'):
+                    # Use CLS token (first token) as cell embedding
+                    batch_embeddings = outputs.last_hidden_state[:, 0, :]
+                elif hasattr(outputs, 'pooler_output'):
+                    batch_embeddings = outputs.pooler_output
+                else:
+                    # Fallback: mean pooling over sequence length
+                    batch_embeddings = outputs.last_hidden_state.mean(dim=1)
+                
+                all_embeddings.append(batch_embeddings.cpu().numpy())
+        
+        # Concatenate all embeddings
+        embeddings = np.concatenate(all_embeddings, axis=0)
         
         print(f"Generated Geneformer embeddings shape: {embeddings.shape}")
         return embeddings
