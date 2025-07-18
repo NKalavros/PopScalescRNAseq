@@ -98,17 +98,17 @@ tk.tokenize_data("geneformer_tokenizer/",
 
 torch.cuda.empty_cache()
 
-n_cells = 1000
+n_cells = 500
 # 0 for last layer, -1 for second to last
 layer = -1
-
+model_version='V2' # Hardcoding this
 # initiate EmbExtractor
 embex = EmbExtractor(model_type="Pretrained",
                      num_classes=0,
                      max_ncells=n_cells,
                      emb_mode='cell',
                      emb_layer=layer,
-                     forward_batch_size=30,
+                     forward_batch_size=20,
                      nproc=int(os.environ.get('SLURM_CPUS_PER_TASK', '1')),
                       )
 huggingface_hub.login(token=os.environ.get('HUGGINGFACE_TOKEN', ''))
