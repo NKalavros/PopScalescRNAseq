@@ -24,8 +24,14 @@ if __name__ == "__main__":
     # Since the output is usually a file, just fix it as that files directory (e.g. scrna_embeddings/uce.h5ad) should become scrna_embeddings
     OUTPUT_DIR = os.path.dirname(OUTPUT)
     #python eval_single_anndata.py --adata_path {path_to_anndata} --dir {output_dir} --species {species} --model_loc {model_loc} --batch_size {batch_size}
+    # We need to be in that directory so switch real quick
+    curr_dir = os.getcwd()
+    os.chdir(FULL_ENV_PATH)
+    print(f"Changed directory to {FULL_ENV_PATH}")
+    # Run the command to extract embeddings
     command = f"python {FULL_ENV_PATH}/eval_single_anndata.py --adata_path {INPUT} --dir {OUTPUT_DIR} --species {SPECIES} --model_loc {MODEL_DIR} --batch_size {BATCH_SIZE} --spec_chrom_csv_path {FULL_ENV_PATH}/model_files/species_chrom.csv --token_file {FULL_ENV_PATH}/model_files/all_tokens.torch --protein_embeddings_dir {FULL_ENV_PATH}/model_files/protein_embeddings/ --offset_pkl_path {FULL_ENV_PATH}/model_files/species_offsets.pkl"
     print(f"Running command: {command}")
     os.system(command)
+    os.chdir(curr_dir)  # Change back to the original directory
     print(f"Embeddings saved to {OUTPUT}")
     # Note: The actual embedding extraction logic is handled in eval_single_anndata.py
