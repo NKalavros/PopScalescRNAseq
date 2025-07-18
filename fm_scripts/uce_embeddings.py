@@ -5,7 +5,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description='Generate CellFM embeddings for scRNA-seq data.')
     parser.add_argument('--input', type=str, required=True, help='Path to input .h5ad file with raw data.')
     parser.add_argument('--output', type=str, required=True, help='Path to output .h5ad file with embeddings.')
-    parser.add_argument('--model-dir', type=str, default="/gpfs/scratch/nk4167/miniconda/envs/uce_env/UCE/", 
+    parser.add_argument('--model-dir', type=str, default="/gpfs/scratch/nk4167/miniconda/envs/uce_env/UCE/33l_8ep_1024t_1280.torch", 
                         help='Directory containing the CellFM model repository.')
     parser.add_argument('--full_env_path', type=str, default="/gpfs/scratch/nk4167/miniconda/envs/uce_env/UCE/",
                         help='Full path to the environment where the model is set up.')
