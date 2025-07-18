@@ -37,7 +37,7 @@ def generate_scgpt_embeddings(adata, model_dir=None):
     # Model configuration
     pad_token = "<pad>"
     special_tokens = [pad_token, "<cls>", "<eoc>"]
-    n_hvg = 1200
+    n_hvg = 3000
     max_seq_len = n_hvg + 1
     n_bins = 51
     

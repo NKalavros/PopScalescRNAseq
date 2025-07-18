@@ -46,8 +46,6 @@ for col in adata.obs.columns:
 sc.pp.filter_cells(adata, min_genes=200)  # Filter cells with at least 200 genes
 sc.pp.filter_cells(adata, min_counts=400)  # Filter cells with at least 200 genes
 sc.pp.filter_genes(adata, min_cells=3)  # Filter genes expressed in
-sc.pp.normalize_total(adata, target_sum=1e4)  # Normalize counts
-sc.pp.log1p(adata)  # Log-transform the data
 # Save as h5ad
 adata.write('data.h5ad')
 print(f'Saved h5ad file: data.h5ad')

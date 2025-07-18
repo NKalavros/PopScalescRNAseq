@@ -47,6 +47,9 @@ else:
 if 'pbmc' in input:
     print("Reading PBMC data...")
     adata = sc.datasets.pbmc3k()
+else:
+    print(f"Reading data from {input}...")
+    adata = sc.read_h5ad(input)
 # Convert gene names to ensembl
 adata.var_names_make_unique()
 # Convert gene names to Ensembl IDs
@@ -71,9 +74,10 @@ for item in result:
 
 # Add ensembl_id column to adata.var
 adata.var['ensembl_id'] = [ensembl_mapping.get(gene, None) for gene in adata.var_names]
-# Make thsoe the var names and keep only those
+# Make those the var names and keep only those
 adata.var_names = adata.var['ensembl_id']
-# remove the ones taht are not 'None'
+adata.var_names_make_unique()  # Ensure unique names after conversion
+# remove the ones that are not 'None'
 adata = adata[:, adata.var_names.notna()].copy()
 # Filter out genes without Ensembl IDs if needed
 print(f"Genes with Ensembl IDs: {sum(adata.var['ensembl_id'].notna())}/{len(adata.var)}")
@@ -81,8 +85,9 @@ print(f"Genes with Ensembl IDs: {sum(adata.var['ensembl_id'].notna())}/{len(adat
 adata.obs['n_counts'] = adata.X.sum(axis=1)
 # Make a directory for the embeddings if it doesn't exist
 os.makedirs("geneformer_tokenizer", exist_ok=True)
+# Write file there
+adata.write_h5ad("geneformer_tokenizer/geneformer_tokenized.h5ad")
 # Save the new anndata there
-adata.write_h5ad("geneformer_tokenizer/pbmc3k_embeddings.h5ad")
 tk = TranscriptomeTokenizer(nproc=int(os.environ.get('SLURM_CPUS_PER_TASK', '1')), model_version=model_version)
 tk.tokenize_data("geneformer_tokenizer/", 
                  "geneformer_tokenizer", 

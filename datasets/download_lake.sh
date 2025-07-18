@@ -13,9 +13,12 @@ import os
 from pathlib import Path
 adata = sc.read_h5ad('lake_scrna_15.h5ad')
 adata.var_names = adata.var['feature_name'].tolist()
+# Remake the adata object with the raw.X as X
+adata = adata.raw.to_adata()
+adata.var_names = adata.var['feature_name'].tolist()
 adata.write_h5ad('lake_scrna_15_genenames.h5ad')
 adata = sc.read_h5ad('lake_snrna_16.h5ad')
+adata = adata.raw.to_adata()
 adata.var_names = adata.var['feature_name'].tolist()
-adata.write_h5ad('lake_snrna_16_genenames.h5ad')
+adata.write_h5ad('lake_snrna_16_genenames.h5ad')"
 
-conda activate /gpfs/scratch/nk4167/miniconda/envs/scGPT
