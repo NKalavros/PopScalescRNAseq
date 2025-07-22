@@ -28,11 +28,11 @@ fi
 conda activate /gpfs/scratch/nk4167/miniconda/envs/geneformer_env
 cd /gpfs/scratch/nk4167/KidneyAtlas/lake
 if [ ! -f "scrna_embeddings/geneformer.h5ad" ]; then
-    python /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/geneformer_embeddings.py  --input lake_scrna_15.h5ad --output scrna_embeddings/geneformer.h5ad
+    python /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/geneformer_embeddings.py  --input lake_scrna_15_genenames.h5ad --output scrna_embeddings/geneformer.h5ad
 fi
 cd /gpfs/scratch/nk4167/KidneyAtlas/lake
 if [ ! -f "snrna_embeddings/geneformer.h5ad" ]; then
-    python /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/geneformer_embeddings.py  --input lake_snrna_16.h5ad --output snrna_embeddings/geneformer.h5ad
+    python /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/geneformer_embeddings.py  --input lake_snrna_16_genenames.h5ad --output snrna_embeddings/geneformer.h5ad
 fi
 cd /gpfs/scratch/nk4167/KidneyAtlas/Abedini
 if [ ! -f "embeddings/geneformer.h5ad" ]; then
@@ -61,7 +61,7 @@ if [ ! -f "scrna_embeddings/scfoundation.h5ad" ]; then
 fi
 cd /gpfs/scratch/nk4167/KidneyAtlas/lake
 if [ ! -f "snrna_embeddings/scfoundation.h5ad" ]; then
-    python /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/scfoundation_embeddings.py  --input lake_snrna_16.h5ad --output snrna_embeddings/scfoundation.h5ad
+    python /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/scfoundation_embeddings.py  --input lake_snrna_16_genenames.h5ad --output snrna_embeddings/scfoundation.h5ad
 fi
 cd /gpfs/scratch/nk4167/KidneyAtlas/Abedini
 if [ ! -f "embeddings/scfoundation.h5ad" ]; then
@@ -114,3 +114,11 @@ cd /gpfs/scratch/nk4167/KidneyAtlas/lake
 if [ ! -f "scrna_embeddings/uce.h5ad" ]; then
     python /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/uce_embeddings.py  --input lake_scrna_15_genenames.h5ad --output scrna_embeddings/uce.h5ad
 fi
+cd /gpfs/scratch/nk4167/KidneyAtlas/lake
+if [ ! -f "snrna_embeddings/uce.h5ad" ]; then
+    python /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/uce_embeddings.py  --input lake_snrna_16_genenames.h5ad --output snrna_embeddings/uce.h5ad
+fi
+cd /gpfs/scratch/nk4167/KidneyAtlas/Abedini
+if [ ! -f "embeddings/uce.h5ad" ]; then
+    python /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/uce_embeddings.py  --input GSE211785_Susztak_SC_SN_ATAC_merged_PostSCVI_final_counts.h5ad --output embeddings/uce.h5ad
+fi  

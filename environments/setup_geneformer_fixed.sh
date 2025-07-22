@@ -68,6 +68,9 @@ echo "Initializing git-lfs..."
 git lfs install
 # Test the installation
 echo "Testing installation..."
+# Weird pandas mismatch
+pip install pandas==2.2.2
+pip install --upgrade scanpy
 python -c "
 import torch
 print(f'✅ PyTorch: {torch.__version__}, CUDA: {torch.cuda.is_available()}')
@@ -87,6 +90,37 @@ except ImportError as e:
 
 print('🎉 Geneformer environment setup COMPLETE!')
 "
+
+# Get an optimized version with flash attention
+# To try and speed things up, let's 
+# Get pytorch version
+python -c "
+import torch
+print(f'✅ PyTorch: {torch.__version__}, CUDA: {torch.cuda.is_available()}')
+"
+# Upgrade pytorch to cuda 12.8
+pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128 --force-reinstall
+# Install nvcc and gcc and g++
+mamba install -c conda-forge -c nvidia cuda-runtime==12.8* cuda-nvcc==12.8*  mamba install cuda-toolkit==12.8 -y-y
+# Install gcc and g++
+mamba install -c conda-forge gcc gxx libstdcxx-ng -y
+# Install cuda runtime
+# Export gcc and g++ variables
+export CC=$CONDA_PREFIX/bin/gcc
+export CXX=$CONDA_PREFIX/bin/g++
+# Export the include path
+export C_INCLUDE_PATH=$CONDA_PREFIX/include
+export CPLUS_INCLUDE_PATH=$CONDA_PREFIX/include
+# Install the rest of the requirements
+cd $FULL_ENV_PATH
+cd Geneformer
+module load cuda
+mamba install -c conda-forge ninja -y
+git clone https://github.com/Dao-AILab/flash-attention
+cd flash-attention
+cd hopper
+export MAX_JOBS=$SLURM_CPUS_PER_TASK
+python setup.py install
 
 echo "✅ Geneformer environment ready at: $FULL_ENV_PATH"
 echo "To activate: mamba activate $FULL_ENV_PATH"

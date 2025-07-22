@@ -40,4 +40,22 @@ python eval_single_anndata.py
 echo "Downloading larger model..."
 # Use curl to download the file with a user agent
 # This is necessary because figshare requires a user agent to download files
-curl -L -o 33l_8ep_1024t_1280.torch https://figshare.com/ndownloader/articles/24320806/versions/5 -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/115.0"
+curl -L -o model_files.zip https://figshare.com/ndownloader/articles/24320806/versions/5 -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/115.0"
+unzip model_files.zip
+
+# To try and speed things up, let's 
+# Get pytorch version
+python -c "
+import torch
+print(f'✅ PyTorch: {torch.__version__}, CUDA: {torch.cuda.is_available()}')
+"
+# Upgrade pytorch to cuda 12.8
+pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128 --force-reinstall
+# Install nvcc and gcc and g++
+mamba install -c conda-forge -c nvidia cuda-nvcc==12.8* -y
+# Install the rest of the requirements
+cd $FULL_ENV_PATH
+git clone https://github.com/Dao-AILab/flash-attention
+cd flash-attention
+cd hopper
+python setup.py install

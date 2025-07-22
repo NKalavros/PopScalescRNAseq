@@ -17,6 +17,9 @@ import mygene
 from geneformer import EmbExtractor
 import huggingface_hub
 
+# Add flash attention as default for torch
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Generate Geneformer embeddings for scRNA-seq data.")
     parser.add_argument('--input', type=str, required=True, help='Path to input h5ad file with raw data.',default='pbmc_scanpy_data.h5ad')
@@ -77,13 +80,14 @@ for item in result:
 adata.var['ensembl_id'] = [ensembl_mapping.get(gene, None) for gene in adata.var_names]
 # Make those the var names and keep only those
 adata.var_names = adata.var['ensembl_id']
-adata.var_names_make_unique()  # Ensure unique names after conversion
 # remove the ones that are not 'None'
 adata = adata[:, adata.var_names.notna()].copy()
 # Filter out genes without Ensembl IDs if needed
 print(f"Genes with Ensembl IDs: {sum(adata.var['ensembl_id'].notna())}/{len(adata.var)}")
 # Add n_counts to adata.obs
 adata.obs['n_counts'] = adata.X.sum(axis=1)
+adata.var_names_make_unique()  # Ensure unique names after conversion
+
 # Make a directory for the embeddings if it doesn't exist
 os.makedirs("geneformer_tokenizer", exist_ok=True)
 print('Tokenizing data...')
@@ -119,6 +123,12 @@ huggingface_hub.login(token=os.environ.get('HUGGINGFACE_TOKEN', ''))
 # Set model path based on version
 if model_version == "V2":
     model_path = "ctheodoris/Geneformer"
+elif model_version == "V2_small":
+    model_path_huggingface="https://huggingface.co/ctheodoris/Geneformer/tree/main/Geneformer-V2-104M"
+    # Download the model from Hugging Face
+    model_path = huggingface_hub.snapshot_download(repo_id=model_path_huggingface,
+                                                  local_dir="/gpfs/scratch/nk4167/miniconda/envs/geneformer_env/",
+                                                  local_dir_use_symlinks=False)
 else:
     model_path = "ctheodoris/Geneformer-V1"
 
