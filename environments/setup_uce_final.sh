@@ -2,7 +2,7 @@ ENV_PREFIX="/gpfs/scratch/nk4167/miniconda/envs"
 ENV_NAME="uce_env"
 FULL_ENV_PATH="$ENV_PREFIX/$ENV_NAME"
 
-echo "🚀 Setting up scGPT environment..."
+echo "🚀 Setting up UCE environment..."
 
 # Remove existing environment if it exists
 if [ -d "$FULL_ENV_PATH" ]; then
@@ -20,6 +20,7 @@ eval "$(conda shell.bash hook)"
 conda activate "$FULL_ENV_PATH"
 
 # Clone and enter UCE directory
+cd $FULL_ENV_PATH
 git clone https://github.com/snap-stanford/UCE/
 cd UCE
 # Install the CUDA packages (CUDA 11)
@@ -50,12 +51,12 @@ import torch
 print(f'✅ PyTorch: {torch.__version__}, CUDA: {torch.cuda.is_available()}')
 "
 # Upgrade pytorch to cuda 12.8
-pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128 --force-reinstall
+#pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128 --force-reinstall
 # Install nvcc and gcc and g++
-mamba install -c conda-forge -c nvidia cuda-nvcc==12.8* -y
+#mamba install -c conda-forge -c nvidia cuda-nvcc==12.8* ninja -y
 # Install the rest of the requirements
-cd $FULL_ENV_PATH
-git clone https://github.com/Dao-AILab/flash-attention
-cd flash-attention
-cd hopper
-python setup.py install
+#cd $FULL_ENV_PATH
+#git clone https://github.com/Dao-AILab/flash-attention
+#cd flash-attention
+#cd hopper
+#python setup.py install

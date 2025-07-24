@@ -44,3 +44,7 @@ sed -i '/causal-conv1d/d' requirements.txt
 
 # Install the rest of the requirements
 pip install -r requirements.txt
+# Download model
+MODEL_URL='https://zenodo.org/api/records/14404063/files-archive'
+curl -L -o scmamba2_model.zip $MODEL_URL
+unzip scmamba2_model.zip -d model_files
