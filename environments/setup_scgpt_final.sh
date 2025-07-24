@@ -26,7 +26,7 @@ source activate "$FULL_ENV_PATH"
 
 # Install PyTorch with specific CUDA version (must be done after environment creation)
 echo "Installing PyTorch with CUDA 11.7..."
-pip install torchtext==0.15.2 scgpt scvi-tools==0.20.3 orbax==0.1.7 torch==2.1.1+cu117 torchvision==0.16.1+cu117 torchaudio==2.1.1+cu117 --index-url https://download.pytorch.org/whl/cu117
+pip install scgpt torchtext==0.15.2 scvi-tools==0.20.3 orbax==0.1.7 torch==2.0.1+cu117 torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cu117
 
 # Test the installation
 echo "Testing installation..."
@@ -42,12 +42,14 @@ print('✅ scGPT imported successfully')
 
 print('🎉 scGPT environment setup COMPLETE!')
 "
-
+pip install gdown
 cd /gpfs/scratch/nk4167/miniconda/envs/scgpt_env
 mkdir -p models
 # Gdrive link: https://drive.google.com/drive/folders/1oWh_-ZRdhtoGQ2Fw24HP41FgLoomVo-y?usp=sharing
 echo "Downloading scGPT model..."
-gdown --id 1oWh_-ZRdhtoGQ2Fw24HP41FgLoomVo-y -O models/scgpt_model.pth
+gdown --id "1H3E_MJ-Dl36AQV6jLbna2EdvgPaqvqcC" -O models/vocab.json
+gdown --id '14AebJfGOUF047Eg40hk57HCtrb0fyDTm' -O models/best_model.pt
+gdown --id '1hh2zGKyWAx3DyovD30GStZ3QlzmSqdk1' -O models/args.json
 # Fix up libstdc++ issue
 echo "Fixing libstdc++ issue..."
 mamba install -c conda-forge libstdcxx-ng -y
@@ -59,9 +61,11 @@ echo "export LD_LIBRARY_PATH=\"$FULL_ENV_PATH/lib:\$LD_LIBRARY_PATH\"" >> "$FULL
 # Install nvcc
 echo "Installing nvcc..."
 mamba install -c conda-forge cudatoolkit-dev -y
+mamba install -c nvidia cuda-nvcc==11.7.99 -y
+mamba install -c conda-forge ninja -y
 # Installing gcc
 echo "Installing gcc..."
- mamba install -c conda-forge gcc_linux-64==11* gxx_linux-64==11* -y# Installing flash-attn
+ mamba install -c conda-forge gcc_linux-64==11* gxx_linux-64==11* -y # Installing flash-attn
 pip install "flash-attn<1.0.5"
 echo "✅ scGPT environment ready at: $FULL_ENV_PATH"
 echo "To activate: mamba activate $FULL_ENV_PATH"

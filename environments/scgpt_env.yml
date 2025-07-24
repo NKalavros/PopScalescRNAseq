@@ -47,4 +47,3 @@ dependencies:
     - scanpy==1.8.2
     - anndata==0.8.0
     - mudata==0.2.3
-    - wandb

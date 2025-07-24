@@ -13,7 +13,7 @@ import anndata as ad
 from pathlib import Path
 import scanpy as sc
 from geneformer import TranscriptomeTokenizer
-import mygenex
+import mygene
 from geneformer import EmbExtractor
 import huggingface_hub
 
