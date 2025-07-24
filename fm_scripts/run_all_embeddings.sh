@@ -112,7 +112,7 @@ fi
 conda activate /gpfs/scratch/nk4167/miniconda/envs/uce_env
 cd /gpfs/scratch/nk4167/KidneyAtlas/lake
 if [ ! -f "scrna_embeddings/uce.h5ad" ]; then
-    python /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/uce_embeddings.py  --input $(pwd)/lake_scrna_15_genenames.h5ad --output scrna_embeddings/uce.h5ad
+    python /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/uce_embeddings.py  --input $(pwd)/lake_scrna_15_genenames.h5ad --output scrna_embeddings/uce.h5ad --batch_size 256
 fi
 cd /gpfs/scratch/nk4167/KidneyAtlas/lake
 if [ ! -f "snrna_embeddings/uce.h5ad" ]; then

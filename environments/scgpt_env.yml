@@ -38,8 +38,6 @@ dependencies:
   
   # Pip packages (PyTorch installed separately due to index URL requirements)
   - pip:
-    - torchtext==0.15.2
-    - numpy==1.24.3
     - pandas==1.5.3
     - matplotlib==3.5.3
     - scipy==1.9.3
@@ -49,7 +47,4 @@ dependencies:
     - scanpy==1.8.2
     - anndata==0.8.0
     - mudata==0.2.3
-    - scvi-tools==0.20.3
-    - scgpt
     - wandb
-    - orbax==0.1.7

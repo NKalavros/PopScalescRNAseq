@@ -26,7 +26,7 @@ source activate "$FULL_ENV_PATH"
 
 # Install PyTorch with specific CUDA version (must be done after environment creation)
 echo "Installing PyTorch with CUDA 11.7..."
-pip install torch==2.0.1+cu117 torchvision torchaudio --index-url https://download.pytorch.org/whl/cu117
+pip install torchtext==0.15.2 scgpt scvi-tools==0.20.3 orbax==0.1.7 torch==2.1.1+cu117 torchvision==0.16.1+cu117 torchaudio==2.1.1+cu117 --index-url https://download.pytorch.org/whl/cu117
 
 # Test the installation
 echo "Testing installation..."
