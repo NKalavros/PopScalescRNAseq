@@ -78,12 +78,15 @@ for item in result:
 
 # Add ensembl_id column to adata.var
 adata.var['ensembl_id'] = [ensembl_mapping.get(gene, None) for gene in adata.var_names]
-# Make those the var names and keep only those
+
+# Filter out genes without valid Ensembl IDs
+valid_mask = adata.var['ensembl_id'].notna() & (adata.var['ensembl_id'] != "")
+adata = adata[:, valid_mask].copy()
+adata.var = adata.var.loc[valid_mask].copy()
 adata.var_names = adata.var['ensembl_id']
-# remove the ones that are not 'None'
-adata = adata[:, adata.var_names.notna()].copy()
-# Filter out genes without Ensembl IDs if needed
-print(f"Genes with Ensembl IDs: {sum(adata.var['ensembl_id'].notna())}/{len(adata.var)}")
+adata.var_names_make_unique()  # Ensure unique names after conversion
+
+print(f"Genes with Ensembl IDs: {adata.n_vars}/{len(gene_symbols)}")
 # Add n_counts to adata.obs
 adata.obs['n_counts'] = adata.X.sum(axis=1)
 adata.var_names_make_unique()  # Ensure unique names after conversion
