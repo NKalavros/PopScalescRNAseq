@@ -86,6 +86,10 @@ adata.var = adata.var.loc[valid_mask].copy()
 adata.var_names = adata.var['ensembl_id']
 adata.var_names_make_unique()  # Ensure unique names after conversion
 
+# Remove index name if it matches a column name to avoid conflicts
+if adata.var.index.name in adata.var.columns:
+    adata.var.index.name = None
+
 print(f"Genes with Ensembl IDs: {adata.n_vars}/{len(gene_symbols)}")
 # Add n_counts to adata.obs
 adata.obs['n_counts'] = adata.X.sum(axis=1)
