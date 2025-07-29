@@ -95,12 +95,6 @@ print(f"Genes with Ensembl IDs: {adata.n_vars}/{len(gene_symbols)}")
 adata.obs['n_counts'] = adata.X.sum(axis=1)
 adata.var_names_make_unique()  # Ensure unique names after conversion
 
-# Ensure all columns in adata.var and adata.obs are string type (per column)
-for col in adata.var.columns:
-    adata.var[col] = adata.var[col].astype(str)
-for col in adata.obs.columns:
-    adata.obs[col] = adata.obs[col].astype(str)
-
 # Make a directory for the embeddings if it doesn't exist
 os.makedirs("geneformer_tokenizer", exist_ok=True)
 print('Tokenizing data...')
