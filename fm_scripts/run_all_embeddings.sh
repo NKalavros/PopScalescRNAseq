@@ -1,3 +1,4 @@
+# NOTE: This code is slightly outdates because I moved the lake files to two actual directories (lake_scrna and lake_snrna)
 conda activate /gpfs/scratch/nk4167/miniconda/envs/scgpt_env
 cd /gpfs/scratch/nk4167/KidneyAtlas/lake
 
@@ -24,7 +25,6 @@ if [ ! -f "embeddings/scgpt.h5ad" ]; then
     python /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/scgpt_embeddings.py  --input data.h5ad --output embeddings/scgpt.h5ad
 fi
 cd /gpfs/scratch/nk4167/KidneyAtlas/Braun
-rm embeddings/scgpt.h5ad
 if [ ! -f "embeddings/scgpt.h5ad" ]; then
     python /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/scgpt_embeddings.py  --input data.h5ad --output embeddings/scgpt.h5ad
 fi
@@ -58,7 +58,7 @@ if [ ! -f "embeddings/geneformer.csv" ]; then
 fi
 mv geneformer_embedded.csv embeddings/geneformer.csv
 cd /gpfs/scratch/nk4167/KidneyAtlas/Braun
-if [ ! -f "embeddings/geneformer.h5ad" ]; then
+if [ ! -f "embeddings/geneformer.csv" ]; then
     python /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/geneformer_embeddings.py  --input data.h5ad --output embeddings/geneformer.h5ad
 fi
 mv geneformer_embedded.csv embeddings/geneformer.csv
