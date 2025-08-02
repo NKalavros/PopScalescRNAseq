@@ -1,27 +1,27 @@
 
 import os
-import scanpy as sc
-import pandas as pd
+import scanpy as sc # type: ignore[import]
+import scib_metrics # type: ignore[import]
+import pandas as pd # type: ignore[import]
 import numpy as np
-import anndata as ad
-import scib
-import sklearn
-import time
-from scipy import sparse
-from scib_metrics.benchmark import Benchmarker, BioConservation, BatchCorrection
-import scvi
-# Import subprocess
+import anndata as ad # type: ignore[import]
+import scib # type: ignore[import]
+import sklearn # type: ignore[import]
+import time 
+from scipy import sparse # type: ignore[import]
+from scib_metrics.benchmark import Benchmarker, BioConservation, BatchCorrection # type: ignore[import]
 import subprocess
+
 # Set base directory (relative to script location)
 BASE_DIR = '/gpfs/scratch/nk4167/KidneyAtlas'  # Change this to your base directory
-
-
 N_OBS = 50000  # Number of observations to subsample for speed
 EMBEDDING_METHODS = ['scgpt', 'scimilarity', 'geneformer', 'scfoundation', 'uce']  # Embedding methods to evaluate
 DIRECTORIES_TO_EVALUATE = ['lake_scrna','lake_snrna', 'Abedini', 'SCP1288', 'Krishna', 'Braun']  # Directories to evaluate
 RUN_SCIB = True  # Whether to run scib evaluation
 RUN_SUBSET = True  # Whether to subsample the data
 RUN_UMAP = True  # Whether to run UMAP
+LIBRARY_KEY = 'library_id'  # Key for batch/library information in obs
+CELL_TYPE_KEY = 'cell_type'  # Key for cell type information in obs
 all_files = {}
 for dir in DIRECTORIES_TO_EVALUATE:
     print(f"Processing directory: {dir}")
@@ -50,8 +50,98 @@ for dir in DIRECTORIES_TO_EVALUATE:
                 embedding_files[subdir].append(file_path)
         all_files[dir + "_" + subdir] = embedding_files
 
-# Refactored: Merge all model embeddings into a single AnnData object per study
 
+# --- Utility Functions ---
+def run_combat(adata, lognorm_layer, batch_key='library_id', n_comps=50):
+    try:
+        adata.X = adata.layers[lognorm_layer].copy()
+        sc.pp.combat(adata, key=batch_key)
+        sc.pp.scale(adata, max_value=10)
+        sc.pp.pca(adata, n_comps=n_comps)
+        adata.obsm['X_pca_combat'] = adata.obsm['X_pca'].copy()
+        adata.X = adata.layers[lognorm_layer].copy()
+        print(f"Combat batch correction complete. Representation 'X_pca_combat' added to obsm.")
+        return True
+    except Exception as e:
+        print(f"Combat integration failed: {e}")
+        return False
+
+def run_harmony(adata, batch_key='library_id', basis='X_pca'):
+    try:
+        sc.external.pp.harmony_integrate(adata, key=batch_key, basis=basis, max_iter_harmony=20, verbose=False)
+        print(f"Harmony integration complete. Representation 'X_pca_harmony' added to obsm.")
+        return True
+    except Exception as e:
+        print(f"Harmony integration failed: {e}")
+        return False
+
+def run_scvi(adata, batch_key='library_id', counts_layer='counts'):
+    try:
+        import scvi # type: ignore[import]
+        # Restore raw counts for scVI
+        if counts_layer in adata.layers:
+            adata.X = adata.layers[counts_layer].copy()
+        else:
+            print(f"Warning: counts layer '{counts_layer}' not found. Using current adata.X for scVI.")
+        scvi.model.SCVI.setup_anndata(adata, batch_key=batch_key)
+        scvi_model = scvi.model.SCVI(adata)
+        scvi_model.train()
+        adata.obsm["X_scvi"] = scvi_model.get_latents()
+        print(f"SCVI integration complete. Representation 'X_scvi' added to obsm.")
+        return True
+    except Exception as e:
+        print(f"SCVI integration failed: {e}")
+        return False
+
+def run_fastmnn(adata, batch_key='library_id'):
+    try:
+        import scanpy.external as sce # type: ignore[import]
+        batches = [adata[adata.obs[batch_key] == b].copy() for b in adata.obs[batch_key].unique()]
+        mnn_corrected, *_ = sce.pp.mnn_correct(*batches, batch_key=batch_key)
+        if hasattr(mnn_corrected, 'obsm') and 'X_pca' in mnn_corrected.obsm:
+            adata.obsm['X_pca_fastmnn'] = mnn_corrected.obsm['X_pca']
+            print(f"FastMNN integration complete. Representation 'X_pca_fastmnn' added to obsm.")
+            return True
+        else:
+            print(f"FastMNN did not return expected 'X_pca' in obsm.")
+            return False
+    except Exception as e:
+        print(f"FastMNN integration failed: {e}")
+        return False
+
+
+def run_scanorama(adata, batch_key='library_id', basis='X_pca', adjusted_basis='X_scanorama'):
+    try:
+        import scanpy.external as sce # type: ignore[import]
+        sce.pp.scanorama_integrate(adata, batch_key, basis=basis, adjusted_basis=adjusted_basis)
+        print(f"Scanorama integration complete. Representation '{adjusted_basis}' added to obsm.")
+        return True
+    except Exception as e:
+        print(f"Scanorama integration failed: {e}")
+        return False
+
+def run_umap_and_plot(adata, obsm_key, method_name, study, base_dir, color=['cell_type']):
+    try:
+        sc.pp.neighbors(adata, use_rep=obsm_key)
+        sc.tl.umap(adata)
+        study_dir = study.replace('_embeddings', '')
+        figures_dir = os.path.join(base_dir, study_dir, 'figures')
+        if not os.path.exists(figures_dir):
+            os.makedirs(figures_dir)
+        save_path = os.path.join(figures_dir, f'{study_dir}_{method_name}.png')
+        sc.pl.embedding(adata, basis='umap', color=color, save=f"_{study_dir}_{method_name}.png", show=False)
+        umaps_gdrive = f'GDrive:KidneyAtlas/{study_dir}/umaps/'
+        local_umap_path = os.path.join('figures', f'umap_{study_dir}_{method_name}.png')
+        subprocess.run(['rclone', 'copy', local_umap_path, umaps_gdrive])
+        print(f"UMAP for {method_name} saved and uploaded.")
+        return True
+    except Exception as e:
+        print(f"UMAP/plot/rclone failed for {method_name} in {study}: {e}")
+        return False
+    
+
+# Load the whole anndata object for each study and merge embeddings
+print("Loading and merging embeddings for all studies...")
 for study in all_files:
     print(f"Merging embeddings for {study}")
     embedding_files = all_files[study]['embeddings']
@@ -107,21 +197,19 @@ for study in all_files:
             del adata_tmp
     print(f"Merged AnnData for {study} with representations: {list(base_adata.obsm.keys())}")
 
-    # --- Batch Correction: PCA (unintegrated) ---
+    # --- Batch Correction and Integration Methods ---
     print(f"Running PCA (unintegrated) for {study}")
-
+    # Save raw counts before normalization/log1p for scVI
+    base_adata.layers['counts'] = base_adata.X.copy()
     sc.pp.normalize_total(base_adata, target_sum=1e4)
     sc.pp.log1p(base_adata)
-    # Save log-normalized counts in a layer only once
     base_adata.layers['lognorm'] = base_adata.X.copy()
     sc.pp.highly_variable_genes(base_adata, n_top_genes=2000, subset=True)
     sc.pp.scale(base_adata, max_value=10)
     sc.pp.pca(base_adata, n_comps=50, use_highly_variable=True)
     print(f"PCA complete. Representation 'X_pca' added to obsm.")
 
-
-    # --- Define all integration keys and readable names ---
-    # Add foundation model embeddings if present
+    # Define all integration keys and readable names
     foundation_methods = [
         ("x_scgpt", "scgpt"),
         ("x_scimilarity", "scimilarity"),
@@ -135,34 +223,29 @@ for study in all_files:
         ("X_scvi", "scvi"),
         ("X_pca_fastmnn", "fastmnn"),
         ("X_scanorama", "scanorama"),
+        ('X_pca_combat', 'combat'),
     ]
-    # Add foundation model embeddings if present
     for obsm_key, method_name in foundation_methods:
         if obsm_key in base_adata.obsm:
             integration_methods.append((obsm_key, method_name))
-    # bbknn does not create a new embedding, but updates neighbors graph
-    # We'll treat it separately
-    # --- Batch Correction: Combat (PCA on ComBat-corrected data) ---
-    print(f"Running Combat integration for {study}")
-    try:
-        # Set X to lognorm for Combat
-        base_adata.X = base_adata.layers['lognorm'].copy()
-        sc.pp.combat(base_adata, key='library_id')
-        # After Combat, run PCA on corrected X
-        sc.pp.scale(base_adata, max_value=10)
-        sc.pp.pca(base_adata, n_comps=50)
-        # Save PCA as X_pca_combat (explicitly as batch correction embedding)
-        base_adata.obsm['X_pca_combat'] = base_adata.obsm['X_pca'].copy()
-        print(f"Combat batch correction complete. Representation 'X_pca_combat' added to obsm.")
-        # Restore X to lognorm for downstream steps
-        base_adata.X = base_adata.layers['lognorm'].copy()
-    except Exception as e:
-        print(f"Combat integration failed for {study}: {e}")
 
-    # Always include ComBat PCA as a batch correction embedding
+    # Run batch correction methods using utility functions
+    print(f"Running Combat integration for {study}")
+    run_combat(base_adata, lognorm_layer='lognorm', batch_key=LIBRARY_KEY, n_comps=50)
     if ("X_pca_combat", "combat") not in integration_methods:
         integration_methods.append(("X_pca_combat", "combat"))
 
+    print(f"Running Harmony integration for {study}")
+    run_harmony(base_adata, batch_key=LIBRARY_KEY, basis='X_pca')
+
+    print(f"Running SCVI integration for {study}")
+    run_scvi(base_adata, batch_key=LIBRARY_KEY, counts_layer='counts')
+
+    print(f"Running FastMNN integration for {study}")
+    run_fastmnn(base_adata, batch_key=LIBRARY_KEY)
+
+    print(f"Running Scanorama integration for {study}")
+    run_scanorama(base_adata, batch_key=LIBRARY_KEY, basis='X_pca', adjusted_basis='X_scanorama')
 
     # --- For each integration, compute UMAP, plot, and rclone upload ---
     available_obsms = []
@@ -170,42 +253,8 @@ for study in all_files:
         if obsm_key in base_adata.obsm:
             available_obsms.append(obsm_key)
             print(f"Running UMAP for {method_name} integration for {study}")
-            try:
-                sc.pp.neighbors(base_adata, use_rep=obsm_key)
-                sc.tl.umap(base_adata)
-                # Plot UMAP
-                study_dir = study.replace('_embeddings', '')
-                figures_dir = os.path.join(BASE_DIR, study_dir, 'figures')
-                if not os.path.exists(figures_dir):
-                    os.makedirs(figures_dir)
-                save_path = os.path.join(figures_dir, f'{study_dir}_{method_name}.png')
-                sc.pl.embedding(base_adata, basis='umap', color=['cell_type'], save=f"_{study_dir}_{method_name}.png", show=False)
-                # rclone upload
-                umaps_gdrive = f'GDrive:KidneyAtlas/{study_dir}/umaps/'
-                local_umap_path = os.path.join('figures', f'umap_{study_dir}_{method_name}.png')
-                subprocess.run(['rclone', 'copy', local_umap_path, umaps_gdrive])
-                print(f"UMAP for {method_name} saved and uploaded.")
-            except Exception as e:
-                print(f"UMAP/plot/rclone failed for {method_name} in {study}: {e}")
+            run_umap_and_plot(base_adata, obsm_key, method_name, study, BASE_DIR, color=['cell_type'])
 
-    # --- bbKNN: neighbors/UMAP/plot/rclone/scIB ---
-
-    print(f"Running UMAP for bbknn integration for {study}")
-    try:
-        sc.tl.umap(base_adata)
-        study_dir = study.replace('_embeddings', '')
-        figures_dir = os.path.join(BASE_DIR, study_dir, 'figures')
-        if not os.path.exists(figures_dir):
-            os.makedirs(figures_dir)
-        save_path = os.path.join(figures_dir, f'{study_dir}_bbknn.png')
-        sc.pl.embedding(base_adata, basis='umap', color=['cell_type'], save=f"_{study_dir}_bbknn.png", show=False)
-        umaps_gdrive = f'GDrive:KidneyAtlas/{study_dir}/umaps/'
-        local_umap_path = os.path.join('figures', f'umap_{study_dir}_bbknn.png')
-        subprocess.run(['rclone', 'copy', local_umap_path, umaps_gdrive])
-        print(f"UMAP for bbknn saved and uploaded.")
-        available_obsms.append("X_umap")
-    except Exception as e:
-        print(f"UMAP/plot/rclone failed for bbknn in {study}: {e}")
 
     # --- Single scIB evaluation for all embeddings ---
     if RUN_SCIB and available_obsms:
@@ -213,8 +262,8 @@ for study in all_files:
             biocons = BioConservation(isolated_labels=False)
             bm = Benchmarker(
                 base_adata,
-                batch_key="library_id",
-                label_key="cell_type",
+                batch_key=LIBRARY_KEY,
+                label_key=CELL_TYPE_KEY,
                 embedding_obsm_keys=available_obsms,
                 pre_integrated_embedding_obsm_key="X_pca",
                 bio_conservation_metrics=biocons,
@@ -228,57 +277,7 @@ for study in all_files:
         except Exception as e:
             print(f"scIB evaluation failed for all integrations in {study}: {e}")
 
-
-    # --- Batch Correction: Harmony ---
-    print(f"Running Harmony integration for {study}")
-    try:
-        sc.external.pp.harmony_integrate(base_adata, key='library_id', basis='X_pca', max_iter_harmony=20, verbose=False)
-        print(f"Harmony integration complete. Representation 'X_pca_harmony' added to obsm.")
-    except Exception as e:
-        print(f"Harmony integration failed for {study}: {e}")
-
-    # --- Batch Correction: SCVI ---
-    print(f"Running SCVI integration for {study}")
-    try:
-        import scvi
-        scvi.model.SCVI.setup_anndata(base_adata, batch_key="library_id")
-        scvi_model = scvi.model.SCVI(base_adata)
-        scvi_model.train()
-        base_adata.obsm["X_scvi"] = scvi_model.get_latents()
-        print(f"SCVI integration complete. Representation 'X_scvi' added to obsm.")
-    except Exception as e:
-        print(f"SCVI integration failed for {study}: {e}")
-
-    # --- Batch Correction: FastMNN ---
-    print(f"Running FastMNN integration for {study}")
-    try:
-        import scanpy.external as sce
-        # Split AnnData by batch
-        batches = [base_adata[base_adata.obs['library_id'] == b].copy() for b in base_adata.obs['library_id'].unique()]
-        mnn_corrected, *_ = sce.pp.mnn_correct(*batches, batch_key="library_id")
-        # mnn_corrected is a concatenated AnnData object; extract the corrected PCA
-        if hasattr(mnn_corrected, 'obsm') and 'X_pca' in mnn_corrected.obsm:
-            base_adata.obsm['X_pca_fastmnn'] = mnn_corrected.obsm['X_pca']
-            print(f"FastMNN integration complete. Representation 'X_pca_fastmnn' added to obsm.")
-        else:
-            print(f"FastMNN did not return expected 'X_pca' in obsm.")
-    except Exception as e:
-        print(f"FastMNN integration failed for {study}: {e}")
-
-    # --- Batch Correction: bbKNN ---
-    print(f"Running bbKNN integration for {study}")
-    try:
-        import bbknn
-        bbknn.bbknn(base_adata, batch_key='library_id')
-        print(f"bbKNN integration complete. Neighbors graph updated for batch correction.")
-    except Exception as e:
-        print(f"bbKNN integration failed for {study}: {e}")
-
-    # --- Batch Correction: Scanorama ---
-    print(f"Running Scanorama integration for {study}")
-    try:
-        import scanpy.external as sce
-        sce.pp.scanorama_integrate(base_adata, 'library_id', basis='X_pca', adjusted_basis='X_scanorama')
-        print(f"Scanorama integration complete. Representation 'X_scanorama' added to obsm.")
-    except Exception as e:
-        print(f"Scanorama integration failed for {study}: {e}")
+    # --- Save the final AnnData object with all embeddings ---`
+    final_save_path = os.path.join(BASE_DIR, study, f"{study}_final_embeddings.h5ad")
+    base_adata.write(final_save_path)
+    print(f"Final AnnData object saved for {study} at {final_save_path}")
