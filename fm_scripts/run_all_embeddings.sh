@@ -48,12 +48,12 @@ fi
 mv geneformer_embedded.csv embeddings/geneformer.csv
 
 cd /gpfs/scratch/nk4167/KidneyAtlas/SCP1288
-if [ ! -f "embeddings/geneformer.csv" ]; then
+if [ ! -f "embeddings/geneformer.h5ad" ]; then
     python /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/geneformer_embeddings.py  --input data.h5ad --output embeddings/geneformer.h5ad
 fi
 mv geneformer_embedded.csv embeddings/geneformer.csv
 cd /gpfs/scratch/nk4167/KidneyAtlas/Krishna
-if [ ! -f "embeddings/geneformer.csv" ]; then
+if [ ! -f "embeddings/geneformer.h5ad" ]; then
     python /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/geneformer_embeddings.py  --input data.h5ad --output embeddings/geneformer.h5ad
 fi
 mv geneformer_embedded.csv embeddings/geneformer.csv

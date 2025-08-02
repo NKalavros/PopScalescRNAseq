@@ -145,6 +145,8 @@ embs = embex.extract_embs(model_path,
                           "geneformer_tokenizer/geneformer_tokenized.dataset",
                           ".",
                           "geneformer_embedded")
+embs.index = adata.obs_names  # Set index to match adata.obs_names
+embs = embs.values  # Convert to numpy array for storage
 # Save the embeddings to the adata object
 adata.obsm['X_geneformer'] = embs
 # Save the adata object with embeddings
