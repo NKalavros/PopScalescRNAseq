@@ -145,3 +145,7 @@ embs = embex.extract_embs(model_path,
                           "geneformer_tokenizer/geneformer_tokenized.dataset",
                           ".",
                           "geneformer_embedded")
+# Save the embeddings to the adata object
+adata.obsm['X_geneformer'] = embs
+# Save the adata object with embeddings
+adata.write_h5ad(output)

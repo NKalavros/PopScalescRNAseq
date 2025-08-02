@@ -14,7 +14,7 @@ import subprocess
 
 # Set base directory (relative to script location)
 BASE_DIR = '/gpfs/scratch/nk4167/KidneyAtlas'  # Change this to your base directory
-N_OBS = 50000  # Number of observations to subsample for speed
+N_OBS = 5000  # Number of observations to subsample for speed
 EMBEDDING_METHODS = ['scgpt', 'scimilarity', 'geneformer', 'scfoundation', 'uce']  # Embedding methods to evaluate
 DIRECTORIES_TO_EVALUATE = ['lake_scrna','lake_snrna', 'Abedini', 'SCP1288', 'Krishna', 'Braun']  # Directories to evaluate
 RUN_SCIB = True  # Whether to run scib evaluation
@@ -86,7 +86,7 @@ def run_scvi(adata, batch_key='library_id', counts_layer='counts'):
         scvi.model.SCVI.setup_anndata(adata, batch_key=batch_key)
         scvi_model = scvi.model.SCVI(adata)
         scvi_model.train()
-        adata.obsm["X_scvi"] = scvi_model.get_latents()
+        adata.obsm["X_scvi"] = scvi_model.get_latent_representation()
         print(f"SCVI integration complete. Representation 'X_scvi' added to obsm.")
         return True
     except Exception as e:
@@ -113,6 +113,13 @@ def run_fastmnn(adata, batch_key='library_id'):
 def run_scanorama(adata, batch_key='library_id', basis='X_pca', adjusted_basis='X_scanorama'):
     try:
         import scanpy.external as sce # type: ignore[import]
+        # We must store cells by batch order for scanorama
+        if batch_key not in adata.obs:
+            raise ValueError(f"Batch key '{batch_key}' not found in adata.obs.")
+        batch_idx_order = adata.obs[batch_key].astype('category').cat.codes
+        adata.obs['batch_idx_order'] = batch_idx_order
+        # Sort by batch_idx_order to ensure scanorama processes cells in the correct order
+        adata = adata[adata.obs['batch_idx_order'].argsort()]
         sce.pp.scanorama_integrate(adata, batch_key, basis=basis, adjusted_basis=adjusted_basis)
         print(f"Scanorama integration complete. Representation '{adjusted_basis}' added to obsm.")
         return True
@@ -154,6 +161,7 @@ for study in all_files:
     # Subsample only once, on scGPT
     if RUN_SUBSET and base_adata.n_obs > N_OBS:
         idx = np.random.choice(base_adata.n_obs, N_OBS, replace=False)
+        stored_obs_names = base_adata.obs_names.copy() #Store to assign to geneformer later
         base_adata = base_adata[idx, :]
     print(f"Set base AnnData for {study} with shape {base_adata.shape}")
     # Lowercase all obsm keys
@@ -171,7 +179,17 @@ for study in all_files:
                 adata_tmp = sc.read_h5ad(file_path)
             elif file_path.endswith('.csv'):
                 adata_tmp = sc.read_csv(file_path)
+                adata_tmp = adata_tmp[1:, :]  # Assuming the first row is not a cell but the index of the CSV
                 adata_tmp.obsm['X_geneformer'] = adata_tmp.X.copy()
+                # Ensure that the number of observations between base_adata and adata_tmp match
+                print(f"adata_tmp shape: {adata_tmp.shape}, base_adata shape: {base_adata.shape}")
+                if adata_tmp.shape[0] ==  len(stored_obs_names):
+                    adata_tmp.obs_names = stored_obs_names
+                else:
+                    print(f"adata_tmp shape {adata_tmp.shape} does not match base_adata shape {base_adata.shape}, skipping.")
+                    del adata_tmp
+                    continue
+
             else:
                 print(f"Unsupported file format for {file_path}")
                 continue
@@ -183,7 +201,13 @@ for study in all_files:
                 print(f"No overlapping cells between base AnnData and {file_path}, skipping.")
                 del adata_tmp
                 continue
-            rep_key = f"x_{method.lower()}" if method != 'geneformer' else 'X_geneformer'
+            # scfoundation and geneformer have specific representation keys (scfoundation_embeddings and X_geneformer)
+            if method == 'geneformer':
+                rep_key = 'x_geneformer'
+            elif method == 'scfoundation':
+                rep_key = 'scfoundation_embeddings'
+            else:
+                rep_key = f"x_{method.lower()}"
             if rep_key in adata_tmp.obsm:
                 arr = adata_tmp[common_idx, :].obsm[rep_key]
                 # Only add if the intersection matches the base AnnData's obs_names exactly
@@ -200,6 +224,9 @@ for study in all_files:
     # --- Batch Correction and Integration Methods ---
     print(f"Running PCA (unintegrated) for {study}")
     # Save raw counts before normalization/log1p for scVI
+    sc.pp.filter_genes(base_adata, min_cells=10)
+    sc.pp.filter_cells(base_adata, min_genes=300)
+    sc.pp.filter_cells(base_adata, min_counts=600)
     base_adata.layers['counts'] = base_adata.X.copy()
     sc.pp.normalize_total(base_adata, target_sum=1e4)
     sc.pp.log1p(base_adata)
@@ -214,7 +241,7 @@ for study in all_files:
         ("x_scgpt", "scgpt"),
         ("x_scimilarity", "scimilarity"),
         ("x_geneformer", "geneformer"),
-        ("x_scfoundation", "scfoundation"),
+        ("scfoundation_embeddings", "scfoundation"),
         ("x_uce", "uce"),
     ]
     integration_methods = [
@@ -234,15 +261,14 @@ for study in all_files:
     run_combat(base_adata, lognorm_layer='lognorm', batch_key=LIBRARY_KEY, n_comps=50)
     if ("X_pca_combat", "combat") not in integration_methods:
         integration_methods.append(("X_pca_combat", "combat"))
-
     print(f"Running Harmony integration for {study}")
     run_harmony(base_adata, batch_key=LIBRARY_KEY, basis='X_pca')
 
     print(f"Running SCVI integration for {study}")
     run_scvi(base_adata, batch_key=LIBRARY_KEY, counts_layer='counts')
 
-    print(f"Running FastMNN integration for {study}")
-    run_fastmnn(base_adata, batch_key=LIBRARY_KEY)
+    print(f"Not Running FastMNN integration for {study} as it does not exist for Python 3.12")
+    #run_fastmnn(base_adata, batch_key=LIBRARY_KEY)
 
     print(f"Running Scanorama integration for {study}")
     run_scanorama(base_adata, batch_key=LIBRARY_KEY, basis='X_pca', adjusted_basis='X_scanorama')
