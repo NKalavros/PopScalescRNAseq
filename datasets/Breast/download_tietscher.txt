@@ -1,0 +1,39 @@
+#!/bin/bash
+# Run this file in bash with this command:  ./filename
+HOST=ftp.ebi.ac.uk
+USER=anonymous
+ftp -pinv $HOST <<EOF
+user $USER
+cd biostudies/fire/E-MTAB-/607/E-MTAB-10607/Files
+binary
+mget "TBB171_singlecell_count_matrix.txt"
+mget "TBB011_complete_singlecell_metadata.txt"
+mget "TBB165_singlecell_count_matrix.txt"
+mget "TBB184_singlecell_count_matrix.txt"
+mget "TBB338_singlecell_count_matrix.txt"
+mget "TBB338_complete_singlecell_metadata.txt"
+mget "TBB226_singlecell_count_matrix.txt"
+mget "TBB214_complete_singlecell_metadata.txt"
+mget "TBB214_singlecell_count_matrix.txt"
+mget "TBB212_singlecell_count_matrix.txt"
+mget "TBB102_singlecell_count_matrix.txt"
+mget "TBB330_complete_singlecell_metadata.txt"
+mget "TBB011_singlecell_count_matrix.txt"
+mget "TBB330_singlecell_count_matrix.txt"
+mget "TBB111_complete_singlecell_metadata.txt"
+mget "TBB129_singlecell_count_matrix.txt"
+mget "TBB184_complete_singlecell_metadata.txt"
+mget "TBB102_complete_singlecell_metadata.txt"
+mget "TBB111_singlecell_count_matrix.txt"
+mget "TBB035_complete_singlecell_metadata.txt"
+mget "TBB129_complete_singlecell_metadata.txt"
+mget "TBB075_complete_singlecell_metadata.txt"
+mget "TBB165_complete_singlecell_metadata.txt"
+mget "TBB075_singlecell_count_matrix.txt"
+mget "TBB035_singlecell_count_matrix.txt"
+mget "TBB212_complete_singlecell_metadata.txt"
+mget "TBB226_complete_singlecell_metadata.txt"
+mget "TBB171_complete_singlecell_metadata.txt"
+disconnect
+bye
+EOF

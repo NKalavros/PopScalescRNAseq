@@ -8,18 +8,27 @@ It is split into three parts:
 
 A collection of at least 5 studies from multiple disease conditions + healthy samples in 3 tissues:
 
-1. Breast
-2. Kidney
-3. Endometrium
+1. Breast (Wu, Pal, Kumar, Gray, ) (Should integrate https://www.nature.com/articles/s41597-022-01236-2 and https://www.biorxiv.org/content/10.1101/2025.03.13.643025v2.full)
+2. Kidney (Bi, Krishna, Braun, Abedini, Lake)
+3. Endometrium (Waiting on data processed by Fenyo lab)
 
 
 ## Conventional methods:
 
-1. Seurat Sketch 
-2. Symphony
-3. scVI
-4. scPoli
-5. CellHint (?)
+### Inter study:
+
+1. Seurat Sketch (Removed since this remained a Python pipeline for now)
+2. Symphony (Through symphonypy)
+3. scANVI (Through scvi-tools)
+4. scPoli (Through scarches)
+5. CellHint (Through the teichlab implementation)
+
+### Intra study:
+
+1. Harmony (through harmonypy)
+2. scVI (through scvi-tools)
+3. scanorama (through scanorama)
+4. ComBat (through ComBat py)
 
 ## scRNA-seq foundation model methods:
 
@@ -27,7 +36,13 @@ A collection of at least 5 studies from multiple disease conditions + healthy sa
 2. scFoundation
 3. CellFM
 4. Geneformer
-5. CellFM (This is quite hard to implement)
+5. UCE
+6. CellFM (This is quite hard to implement)
+
+## Evaluation:
+
+1. UMAP visualizations
+2. scIB evaluation
 
 ## Structure:
 

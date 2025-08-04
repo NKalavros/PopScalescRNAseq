@@ -20,4 +20,4 @@ adata.var_names = adata.var['feature_name'].tolist()
 # Print the first genenames
 print(adata.var_names[:10])
 
-adata.write_h5ad('kumar_geneneames.h5ad')"
+adata.write_h5ad('data.h5ad')"

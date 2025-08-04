@@ -20,8 +20,8 @@ DIRECTORIES_TO_EVALUATE = ['lake_scrna','lake_snrna', 'Abedini', 'SCP1288', 'Kri
 RUN_SCIB = True  # Whether to run scib evaluation
 RUN_SUBSET = True  # Whether to subsample the data
 RUN_UMAP = True  # Whether to run UMAP
-LIBRARY_KEY = 'library_id'  # Key for batch/library information in obs
-CELL_TYPE_KEY = 'cell_type'  # Key for cell type information in obs
+LIBRARY_KEY = 'library_id'  # Key for batch/library information in obs (biosample_id,orig.ident)
+CELL_TYPE_KEY = 'cell_type'  # Key for cell type information in obs (FinalCellType, Major.subtype, celltype_major)
 all_files = {}
 for dir in DIRECTORIES_TO_EVALUATE:
     print(f"Processing directory: {dir}")
