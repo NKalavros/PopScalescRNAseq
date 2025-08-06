@@ -7,7 +7,7 @@ def parse_args():
     parser.add_argument('--output', type=str, required=True, help='Path to output .h5ad file with embeddings.')
     parser.add_argument('--model-dir', type=str, default="/gpfs/scratch/nk4167/miniconda/envs/uce_env/UCE/33l_8ep_1024t_1280.torch", 
                         help='Directory containing the CellFM model repository.')
-    parser.add_argument('--full_env_path', type=str, default="/gpfs/scratch/nk4167/miniconda/envs/uce_env/UCE/",
+    parser.add_argument('--full_env_path', type=str, default="/gpfs/scratch/nk4167/miniconda/envs/uce_env/",
                         help='Full path to the environment where the model is set up.')
     parser.add_argument('--species', type=str, default='human', help='Species for the model (e.g., human, mouse).')
     parser.add_argument('--batch_size', type=int, default=64, help='Batch size for processing.')
@@ -27,7 +27,7 @@ if __name__ == "__main__":
     # We need to be in that directory so switch real quick
     curr_dir = os.getcwd()
     #os.chdir(FULL_ENV_PATH)
-    print(f"Changed directory to {FULL_ENV_PATH}")
+    #print(f"Changed directory to {FULL_ENV_PATH}")
     # Run the command to extract embeddings
     command = f"python {FULL_ENV_PATH}/eval_single_anndata.py --adata_path {INPUT} --dir {OUTPUT_DIR} --species {SPECIES} --model_loc {MODEL_DIR} --batch_size {BATCH_SIZE} --nlayers 33 --spec_chrom_csv_path {FULL_ENV_PATH}/UCE/model_files/species_chrom.csv --token_file {FULL_ENV_PATH}/UCE/model_files/all_tokens.torch --protein_embeddings_dir {FULL_ENV_PATH}/UCE/model_files/protein_embeddings/ --offset_pkl_path {FULL_ENV_PATH}/UCE/model_files/species_offsets.pkl" 
     print(f"Running command: {command}")
