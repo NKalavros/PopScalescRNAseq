@@ -26,10 +26,10 @@ if __name__ == "__main__":
     #python eval_single_anndata.py --adata_path {path_to_anndata} --dir {output_dir} --species {species} --model_loc {model_loc} --batch_size {batch_size}
     # We need to be in that directory so switch real quick
     curr_dir = os.getcwd()
-    os.chdir(FULL_ENV_PATH)
+    #os.chdir(FULL_ENV_PATH)
     print(f"Changed directory to {FULL_ENV_PATH}")
     # Run the command to extract embeddings
-    command = f"python eval_single_anndata.py --adata_path {INPUT} --dir {OUTPUT_DIR} --species {SPECIES} --model_loc {MODEL_DIR} --batch_size {BATCH_SIZE} --nlayers 33"
+    command = f"python {FULL_ENV_PATH}/eval_single_anndata.py --adata_path {INPUT} --dir {OUTPUT_DIR} --species {SPECIES} --model_loc {MODEL_DIR} --batch_size {BATCH_SIZE} --nlayers 33"
     print(f"Running command: {command}")
     os.system(command)
     os.chdir(curr_dir)  # Change back to the original directory

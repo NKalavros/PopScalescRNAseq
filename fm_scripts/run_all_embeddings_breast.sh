@@ -143,30 +143,42 @@ FULL_ENV_PATH='/gpfs/scratch/nk4167/miniconda/envs/uce_env'
 cd /gpfs/scratch/nk4167/BreastAtlas/Bassez
 mkdir embeddings
 if [ ! -f "embeddings/uce.h5ad" ]; then
+    rm $FULL_ENV_PATH/UCE/*embeddings*
     python /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/uce_embeddings.py  --input $(pwd)/data.h5ad --output embeddings/uce.h5ad --batch_size 256
+    mv $FULL_ENV_PATH/UCE/embeddingsdata_uce_adata.h5ad embeddings/uce.h5ad
 fi
 cd /gpfs/scratch/nk4167/BreastAtlas/Wu
 mkdir embeddings
 if [ ! -f "embeddings/uce.h5ad" ]; then
+    rm $FULL_ENV_PATH/UCE/*embeddings*
     python /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/uce_embeddings.py  --input $(pwd)/data.h5ad --output embeddings/uce.h5ad --batch_size 256
+    mv $FULL_ENV_PATH/UCE/embeddingsdata_uce_adata.h5ad embeddings/uce.h5ad
 fi
 cd /gpfs/scratch/nk4167/BreastAtlas/Pal
 mkdir embeddings
 if [ ! -f "embeddings/uce.h5ad" ]; then
+    rm $FULL_ENV_PATH/UCE/*embeddings*
     python /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/uce_embeddings.py  --input $(pwd)/data.h5ad --output embeddings/uce.h5ad --batch_size 256
+    mv $FULL_ENV_PATH/UCE/embeddingsdata_uce_adata.h5ad embeddings/uce.h5ad
 fi
 cd /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/Gray
 mkdir embeddings
 if [ ! -f "embeddings/uce.h5ad" ]; then
+    rm $FULL_ENV_PATH/UCE/*embeddings*
     python /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/uce_embeddings.py  --input $(pwd)/data.h5ad --output embeddings/uce.h5ad --batch_size 256
+    mv $FULL_ENV_PATH/UCE/embeddingsdata_uce_adata.h5ad embeddings/uce.h5ad
 fi
 cd /gpfs/scratch/nk4167/BreastAtlas/Klughammer_snRNA
 mkdir embeddings
 if [ ! -f "embeddings/uce.h5ad" ]; then
+    rm $FULL_ENV_PATH/UCE/*embeddings*
     python /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/uce_embeddings.py  --input $(pwd)/data.h5ad --output embeddings/uce.h5ad --batch_size 256
+    mv $FULL_ENV_PATH/UCE/embeddingsdata_uce_adata.h5ad embeddings/uce.h5ad
 fi
 cd /gpfs/scratch/nk4167/BreastAtlas/Klughammer_scRNA
 mkdir embeddings
 if [ ! -f "embeddings/uce.h5ad" ]; then
+    rm $FULL_ENV_PATH/UCE/*embeddings*
     python /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/uce_embeddings.py  --input $(pwd)/data.h5ad --output embeddings/uce.h5ad --batch_size 256
+    mv $FULL_ENV_PATH/UCE/embeddingsdata_uce_adata.h5ad embeddings/uce.h5ad
 fi
