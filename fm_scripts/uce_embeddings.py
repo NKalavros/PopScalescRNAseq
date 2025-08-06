@@ -29,7 +29,7 @@ if __name__ == "__main__":
     #os.chdir(FULL_ENV_PATH)
     print(f"Changed directory to {FULL_ENV_PATH}")
     # Run the command to extract embeddings
-    command = f"python {FULL_ENV_PATH}/eval_single_anndata.py --adata_path {INPUT} --dir {OUTPUT_DIR} --species {SPECIES} --model_loc {MODEL_DIR} --batch_size {BATCH_SIZE} --nlayers 33"
+    command = f"python {FULL_ENV_PATH}/eval_single_anndata.py --adata_path {INPUT} --dir {OUTPUT_DIR} --species {SPECIES} --model_loc {MODEL_DIR} --batch_size {BATCH_SIZE} --nlayers 33 --spec_chrom_csv_path {FULL_ENV_PATH}/UCE/model_files/species_chrom.csv --token_file {FULL_ENV_PATH}/UCE/model_files/all_tokens.torch --protein_embeddings_dir {FULL_ENV_PATH}/UCE/model_files/protein_embeddings/ --offset_pkl_path {FULL_ENV_PATH}/UCE/model_files/species_offsets.pkl" 
     print(f"Running command: {command}")
     os.system(command)
     os.chdir(curr_dir)  # Change back to the original directory
