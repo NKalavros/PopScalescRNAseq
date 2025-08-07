@@ -20,8 +20,8 @@ DIRECTORIES_TO_EVALUATE = ['lake_scrna','lake_snrna', 'Abedini', 'SCP1288', 'Kri
 RUN_SCIB = True  # Whether to run scib evaluation
 RUN_SUBSET = True  # Whether to subsample the data
 RUN_UMAP = True  # Whether to run UMAP
-LIBRARY_KEY = 'library_id'  # Key for batch/library information in obs (biosample_id,orig.ident)
-CELL_TYPE_KEY = 'cell_type'  # Key for cell type information in obs (FinalCellType, Major.subtype, celltype_major)
+LIBRARY_KEY = 'library_id'  # Key for batch/library information in obs (biosample_id,orig.ident, Sample,SampleID, library_id)
+CELL_TYPE_KEY = 'cell_type'  # Key for cell type information in obs (FinalCellType, subclass.l1, subclass.l2 Major.subtype, cell_type, celltype_major,ClusterName_AllCells,cluster,Cluster_Idents)
 all_files = {}
 for dir in DIRECTORIES_TO_EVALUATE:
     print(f"Processing directory: {dir}")
@@ -31,7 +31,7 @@ for dir in DIRECTORIES_TO_EVALUATE:
         os.makedirs(figures_dir)
     if not os.path.exists(umaps_dir):
         os.makedirs(umaps_dir)
-    # Get all subdirectories that end with 'embeddings' (not just containing 'embeddings')
+    # Get all subdirectoriesrun_ that end with 'embeddings' (not just containing 'embeddings')
     dir_path = os.path.join(BASE_DIR, dir)
     subdirs = [d for d in os.listdir(dir_path)
               if os.path.isdir(os.path.join(dir_path, d)) and d.endswith('embeddings') and not d.startswith('.')]
@@ -43,12 +43,12 @@ for dir in DIRECTORIES_TO_EVALUATE:
         for method in EMBEDDING_METHODS:
             # Geneformer generates geneformer.csv, so we need to check for that
             if method.lower() == 'geneformer':
-                file_path = os.path.join(dir_path, subdir, 'geneformer.csv')
+                file_path = os.path.join(dir_path, subdir, 'geneformer.h5ad')
             else:
                 file_path = os.path.join(dir_path, subdir, f'{method}.h5ad')
             if os.path.exists(file_path):
                 embedding_files[subdir].append(file_path)
-        all_files[dir + "_" + subdir] = embedding_files
+        all_files[dir] = embedding_files
 
 
 # --- Utility Functions ---
@@ -121,16 +121,21 @@ def run_scanorama(adata, batch_key='library_id', basis='X_pca', adjusted_basis='
         # Sort by batch_idx_order to ensure scanorama processes cells in the correct order
         adata = adata[adata.obs['batch_idx_order'].argsort()]
         sce.pp.scanorama_integrate(adata, batch_key, basis=basis, adjusted_basis=adjusted_basis)
+        print(adata)
+        # Weird patchh to allow scanorama to run within the function with a global object (it does not do in place mods)
+        adata.obsm[adjusted_basis] = adata.obsm[adjusted_basis].copy()
         print(f"Scanorama integration complete. Representation '{adjusted_basis}' added to obsm.")
-        return True
+        return(adata)
     except Exception as e:
         print(f"Scanorama integration failed: {e}")
-        return False
+        return adata
 
 def run_umap_and_plot(adata, obsm_key, method_name, study, base_dir, color=['cell_type']):
     try:
         sc.pp.neighbors(adata, use_rep=obsm_key)
+        print('Neighbors computed for UMAP.')
         sc.tl.umap(adata)
+        print(f"UMAP computed for {method_name} in {study}.")
         study_dir = study.replace('_embeddings', '')
         figures_dir = os.path.join(base_dir, study_dir, 'figures')
         if not os.path.exists(figures_dir):
@@ -170,7 +175,7 @@ for study in all_files:
     for method in EMBEDDING_METHODS:
         if method == 'scgpt':
             continue  # already loaded
-        method_file = f"{method}.h5ad" if method != 'geneformer' else 'geneformer.csv'
+        method_file = f"{method}.h5ad"
         embedding_file = [f for f in embedding_files if method_file in f]
         file_path = embedding_file[0] if embedding_file else None
         if file_path:
@@ -220,6 +225,35 @@ for study in all_files:
                 print(f"Representation {rep_key} not found in obsm for {file_path}")
             del adata_tmp
     print(f"Merged AnnData for {study} with representations: {list(base_adata.obsm.keys())}")
+    print(f'Metadata columns in adata.obs: {base_adata.obs.columns.tolist()}')
+    if LIBRARY_KEY not in base_adata.obs:
+        print(f"Warning: {LIBRARY_KEY} not found in adata.obs, using potential searches.")
+        potential_keys = ['biosample_id', 'orig.ident', 'Sample', 'SampleID', 'library_id']
+        for key in potential_keys:
+            if key in base_adata.obs:
+                print(f"Found {key} in adata.obs, using it as LIBRARY_KEY.")
+                base_adata.obs[LIBRARY_KEY] = base_adata.obs[key]
+                break
+        else:
+            print(f"Error: No valid LIBRARY_KEY found in adata.obs. Exiting.")
+            continue
+    if CELL_TYPE_KEY not in base_adata.obs:
+        print(f"Warning: {CELL_TYPE_KEY} not found in adata.obs, using potential searches.")
+        potential_keys = ['FinalCellType', 'subclass.l1', 'subclass.l2', 'Major.subtype', 'cell_type', 'celltype_major', 'ClusterName_AllCells', 'cluster', 'Cluster_Idents']
+        for key in potential_keys:
+            if key in base_adata.obs:
+                print(f"Found {key} in adata.obs, using it as CELL_TYPE_KEY.")
+                base_adata.obs[CELL_TYPE_KEY] = base_adata.obs[key]
+                break
+        else:
+            print(f"Error: No valid CELL_TYPE_KEY found in adata.obs. Exiting.")
+            continue
+    # Ensure the library_id and cell_type columns are categorical
+    base_adata.obs[LIBRARY_KEY] = base_adata.obs[LIBRARY_KEY].astype('str').astype('category')
+    base_adata.obs[CELL_TYPE_KEY] = base_adata.obs[CELL_TYPE_KEY].astype('str').astype('category')
+    print(f"Final AnnData for {study} has {base_adata.n_obs} cells and {base_adata.n_vars} genes.")
+    print(f"Library key '{LIBRARY_KEY}' has {base_adata.obs[LIBRARY_KEY].nunique()} unique values.")
+    print(f"Cell type key '{CELL_TYPE_KEY}' has {base_adata.obs[CELL_TYPE_KEY].nunique()} unique values.")
 
     # --- Batch Correction and Integration Methods ---
     print(f"Running PCA (unintegrated) for {study}")
@@ -252,10 +286,8 @@ for study in all_files:
         ("X_scanorama", "scanorama"),
         ('X_pca_combat', 'combat'),
     ]
-    for obsm_key, method_name in foundation_methods:
-        if obsm_key in base_adata.obsm:
-            integration_methods.append((obsm_key, method_name))
-
+    # Remaking library key to remove non-existent categories
+    base_adata.obs[LIBRARY_KEY] = base_adata.obs[LIBRARY_KEY].astype('str').astype('category')
     # Run batch correction methods using utility functions
     print(f"Running Combat integration for {study}")
     run_combat(base_adata, lognorm_layer='lognorm', batch_key=LIBRARY_KEY, n_comps=50)
@@ -271,8 +303,11 @@ for study in all_files:
     #run_fastmnn(base_adata, batch_key=LIBRARY_KEY)
 
     print(f"Running Scanorama integration for {study}")
-    run_scanorama(base_adata, batch_key=LIBRARY_KEY, basis='X_pca', adjusted_basis='X_scanorama')
+    base_adata = run_scanorama(base_adata, batch_key=LIBRARY_KEY, basis='X_pca', adjusted_basis='X_scanorama')
 
+    for obsm_key, method_name in foundation_methods:
+        if obsm_key in base_adata.obsm:
+            integration_methods.append((obsm_key, method_name))
     # --- For each integration, compute UMAP, plot, and rclone upload ---
     available_obsms = []
     for obsm_key, method_name in integration_methods:
@@ -298,12 +333,13 @@ for study in all_files:
             )
             bm.prepare()
             bm.benchmark()
-            bm.plot_results_table(show=False, min_max_scale=False)
+            bm.plot_results_table(show=False, min_max_scale=False,save_dir=os.path.join(BASE_DIR, study, 'figures'))
+            os.system(f"rclone copy --progress {os.path.join(BASE_DIR, study, 'figures')} GDrive:KidneyAtlas/{study}/figures/")
             print(f"scIB evaluation complete for all integrations in {study}.")
         except Exception as e:
             print(f"scIB evaluation failed for all integrations in {study}: {e}")
 
     # --- Save the final AnnData object with all embeddings ---`
-    final_save_path = os.path.join(BASE_DIR, study, f"{study}_final_embeddings.h5ad")
+    final_save_path = os.path.join(BASE_DIR, study.replace('_embeddings',''), f"{study.replace('_embeddings','')}_final_embeddings.h5ad")
     base_adata.write(final_save_path)
-    print(f"Final AnnData object saved for {study} at {final_save_path}")
+    print(f"Final AnnData object saved for {study.replace('_embeddings','')} at {final_save_path}")
