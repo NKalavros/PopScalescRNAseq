@@ -9,13 +9,14 @@ def main():
     parser = argparse.ArgumentParser(description="Run Geneformer embedding generation.")
     parser.add_argument('--workdir', type=str, default='.', help='Working directory to change to')
     parser.add_argument('--batch_size', type=int, default=20, help='Batch size for Geneformer')
-    parser.add_argument('--input_file', type=str, required=True, help='Input h5ad file')
+    parser.add_argument('--input_file', type=str, default='data.h5ad', required=False, help='Input h5ad file')
     parser.add_argument('--output_file', type=str, default='embeddings/geneformer_helical.h5ad', help='Output h5ad file')
+    parser.add_argument('--model_name', type=str, default='gf-18L-316M-i4096',help='Name of the model to use')
     args = parser.parse_args()
 
     print(f"Arguments: {args}")
     os.chdir(args.workdir)
-    model_config = GeneformerConfig(batch_size=args.batch_size, device= "cuda" if torch.cuda.is_available() else "cpu")
+    model_config = GeneformerConfig(model_name = args.model_name,batch_size=args.batch_size, device= "cuda" if torch.cuda.is_available() else "cpu")
     geneformer_v2 = Geneformer(model_config)
 
     adata = ad.read_h5ad(args.input_file)
@@ -38,8 +39,11 @@ def main():
         adata.obs.drop('_index', axis=1, inplace=True)
     if '_index' in adata.var.columns:
         adata.var.drop('_index', axis=1, inplace=True)
+    # Drop adata.var index
+    adata.var.reset_index(drop=True, inplace=True)
 
     adata.write(args.output_file)
+
     print("Base model embeddings shape:", embeddings.shape)
 
 if __name__ == "__main__":
