@@ -36,32 +36,36 @@ conda activate /gpfs/scratch/nk4167/miniconda/envs/helical-package
 cd /gpfs/scratch/nk4167/KidneyAtlas/lake_scrna
 mkdir -p embeddings
 if [ ! -f "embeddings/geneformer_helical.h5ad" ]; then
-    python /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/run_helical_geneoformer.py  --input lake_scrna_15_genenames.h5ad --output embeddings/geneformer.h5ad
+    python /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/run_helical_geneformer.py  --input lake_scrna_15_genenames.h5ad --output embeddings/geneformer_helical.h5ad
 fi
+
 cd /gpfs/scratch/nk4167/KidneyAtlas/lake_snrna
 mkdir -p embeddings
 if [ ! -f "embeddings/geneformer_helical.h5ad" ]; then
-    python /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/run_helical_geneoformer.py  --input lake_snrna_16_genenames.h5ad --output embeddings/geneformer.h5ad
+    python /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/run_helical_geneformer.py  --input lake_snrna_16_genenames.h5ad --output embeddings//geneformer_helical.h5ad
 fi
+
 cd /gpfs/scratch/nk4167/KidneyAtlas/Abedini
 mkdir -p embeddings
 if [ ! -f "embeddings/geneformer_helical.h5ad" ]; then
-    python /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/run_helical_geneoformer.py  --input GSE211785_Susztak_SC_SN_ATAC_merged_PostSCVI_final_counts.h5ad --output embeddings/geneformer.h5ad
+    python /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/run_helical_geneformer.py  --input GSE211785_Susztak_SC_SN_ATAC_merged_PostSCVI_final_counts.h5ad --output embeddings//geneformer_helical.h5ad
 fi
+
 cd /gpfs/scratch/nk4167/KidneyAtlas/SCP1288
 mkdir -p embeddings
 if [ ! -f "embeddings/geneformer_helical.h5ad" ]; then
-    python /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/run_helical_geneoformer.py  --input data.h5ad --output embeddings/geneformer.h5ad
+    python /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/run_helical_geneformer.py  --input data.h5ad --output embeddings//geneformer_helical.h5ad
 fi
+
 cd /gpfs/scratch/nk4167/KidneyAtlas/Krishna
 mkdir -p embeddings
 if [ ! -f "embeddings/geneformer_helical.h5ad" ]; then
-    python /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/run_helical_geneoformer.py  --input data.h5ad --output embeddings/geneformer.h5ad
+    python /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/run_helical_geneformer.py  --input data.h5ad --output embeddings/geneformer_helical.h5ad
 fi
 cd /gpfs/scratch/nk4167/KidneyAtlas/Braun
 mkdir -p embeddings
 if [ ! -f "embeddings/geneformer_helical.h5ad" ]; then
-    python /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/run_helical_geneoformer.py  --input data.h5ad --output embeddings/geneformer.h5ad
+    python /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/run_helical_geneformer.py  --input data.h5ad --output embeddings//geneformer_helical.h5ad
 fi
 
 

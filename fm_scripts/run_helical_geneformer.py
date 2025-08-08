@@ -22,7 +22,23 @@ def main():
     dataset = geneformer_v2.process_data(adata)
     embeddings = geneformer_v2.get_embeddings(dataset)
     adata.obsm['X_geneformer_helical'] = embeddings
-    
+
+    # Sanitize obs and var columns
+    adata.obs.columns = adata.obs.columns.astype(str)
+    adata.var.columns = adata.var.columns.astype(str)
+    # Convert object dtype columns to string
+    for col in adata.obs.columns:
+        if adata.obs[col].dtype == 'object':
+            adata.obs[col] = adata.obs[col].astype(str)
+    for col in adata.var.columns:
+        if adata.var[col].dtype == 'object':
+            adata.var[col] = adata.var[col].astype(str)
+    # Remove problematic _index column if present
+    if '_index' in adata.obs.columns:
+        adata.obs.drop('_index', axis=1, inplace=True)
+    if '_index' in adata.var.columns:
+        adata.var.drop('_index', axis=1, inplace=True)
+
     adata.write(args.output_file)
     print("Base model embeddings shape:", embeddings.shape)
 
