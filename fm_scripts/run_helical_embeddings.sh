@@ -21,7 +21,6 @@ ann_data
 
 
 
-from helical import models
 import pkgutil
 for model in pkgutil.iter_modules(models.__path__):
     if model.name != "base_models" and model.name != "fine_tune":
@@ -29,13 +28,14 @@ for model in pkgutil.iter_modules(models.__path__):
 
 
 
-
+from helical import models
 from helical.models.geneformer import Geneformer, GeneformerConfig
 import torch
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
-model_config = GeneformerConfig(batch_size=10,device=device)
+model_config = GeneformerConfig(batch_size=20,device=device)
 geneformer = Geneformer(configurer=model_config)
+dataset = geneformer.process_data(adata, gene_names="gene_name")
 
 
 
@@ -44,7 +44,6 @@ geneformer = Geneformer(configurer=model_config)
 #model_config=UCEConfig(batch_size=10)
 #uce = UCE(configurer=model_config)
 
-dataset = geneformer.process_data(ann_data[:100], gene_names="gene_name")
 
 
 

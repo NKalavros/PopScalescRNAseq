@@ -124,6 +124,7 @@ embex = EmbExtractor(model_type="Pretrained",
                      emb_layer=layer,
                      forward_batch_size=20,
                      nproc=int(os.environ.get('SLURM_CPUS_PER_TASK', '4')),
+                     model_version=model_version
                       )
 huggingface_hub.login(token=os.environ.get('HUGGINGFACE_TOKEN', ''))
 

@@ -11,10 +11,10 @@ import time
 from scipy import sparse # type: ignore[import]
 from scib_metrics.benchmark import Benchmarker, BioConservation, BatchCorrection # type: ignore[import]
 import subprocess
-
+import gc
 # Set base directory (relative to script location)
 BASE_DIR = '/gpfs/scratch/nk4167/KidneyAtlas'  # Change this to your base directory
-N_OBS = 5000  # Number of observations to subsample for speed
+N_OBS = 10000  # Number of observations to subsample for speed
 EMBEDDING_METHODS = ['scgpt', 'scimilarity', 'geneformer', 'scfoundation', 'uce']  # Embedding methods to evaluate
 DIRECTORIES_TO_EVALUATE = ['lake_scrna','lake_snrna', 'Abedini', 'SCP1288', 'Krishna', 'Braun']  # Directories to evaluate
 RUN_SCIB = True  # Whether to run scib evaluation
@@ -182,6 +182,7 @@ for study in all_files:
             print(f"Loading embedding: {file_path}")
             if file_path.endswith('.h5ad'):
                 adata_tmp = sc.read_h5ad(file_path)
+            # This branch will never actually happen now
             elif file_path.endswith('.csv'):
                 adata_tmp = sc.read_csv(file_path)
                 adata_tmp = adata_tmp[1:, :]  # Assuming the first row is not a cell but the index of the CSV
@@ -202,6 +203,8 @@ for study in all_files:
             # Align cells by index (assume same order, or use intersection if needed)
             # Here, we use the intersection of cell names (index)
             common_idx = base_adata.obs_names.intersection(adata_tmp.obs_names)
+            # Reorder base adata to make sure we'll add the correct embeddings to the correct places
+            base_adata = base_adata[common_idx, :]
             if len(common_idx) == 0:
                 print(f"No overlapping cells between base AnnData and {file_path}, skipping.")
                 del adata_tmp
@@ -217,7 +220,12 @@ for study in all_files:
                 arr = adata_tmp[common_idx, :].obsm[rep_key]
                 # Only add if the intersection matches the base AnnData's obs_names exactly
                 if list(common_idx) == list(base_adata.obs_names):
-                    base_adata.obsm[rep_key] = arr
+                    # Introducing a minor name change here for extra consistency.
+                    if rep_key != 'scfoundation_embeddings':
+                        rep_key_new = rep_key
+                    else:
+                        rep_key_new = 'x_scfoundation'
+                    base_adata.obsm[rep_key_new] = arr
                     print(f"Added {rep_key} to base AnnData.obsm for {len(common_idx)} cells.")
                 else:
                     print(f"Cell indices do not match exactly for {rep_key} in {file_path}. Skipping this embedding.")
@@ -228,12 +236,17 @@ for study in all_files:
     print(f'Metadata columns in adata.obs: {base_adata.obs.columns.tolist()}')
     if LIBRARY_KEY not in base_adata.obs:
         print(f"Warning: {LIBRARY_KEY} not found in adata.obs, using potential searches.")
-        potential_keys = ['biosample_id', 'orig.ident', 'Sample', 'SampleID', 'library_id']
+        potential_keys = ['biosample_id', 'orig.ident', 'Sample', 'SampleID', 'library_id','orig_ident','sample']
         for key in potential_keys:
             if key in base_adata.obs:
-                print(f"Found {key} in adata.obs, using it as LIBRARY_KEY.")
-                base_adata.obs[LIBRARY_KEY] = base_adata.obs[key]
-                break
+                # Check if there are more than one unique values
+                if base_adata.obs[key].nunique() > 1:
+                    print(f"Found {key} in adata.obs, using it as LIBRARY_KEY.")
+                    base_adata.obs[LIBRARY_KEY] = base_adata.obs[key]
+                    break
+                else:
+                    print(f"Found {key} in adata.obs, but it has only one unique value, skipping.")
+                    continue
         else:
             print(f"Error: No valid LIBRARY_KEY found in adata.obs. Exiting.")
             continue
@@ -242,9 +255,14 @@ for study in all_files:
         potential_keys = ['FinalCellType', 'subclass.l1', 'subclass.l2', 'Major.subtype', 'cell_type', 'celltype_major', 'ClusterName_AllCells', 'cluster', 'Cluster_Idents']
         for key in potential_keys:
             if key in base_adata.obs:
-                print(f"Found {key} in adata.obs, using it as CELL_TYPE_KEY.")
-                base_adata.obs[CELL_TYPE_KEY] = base_adata.obs[key]
-                break
+                # Check if there are more than one unique values
+                if base_adata.obs[key].nunique() > 1:
+                    print(f"Found {key} in adata.obs, using it as CELL_TYPE_KEY.")
+                    base_adata.obs[CELL_TYPE_KEY] = base_adata.obs[key]
+                    break
+                else:
+                    print(f"Found {key} in adata.obs, but it has only one unique value, skipping.")
+                    continue
         else:
             print(f"Error: No valid CELL_TYPE_KEY found in adata.obs. Exiting.")
             continue
@@ -275,14 +293,13 @@ for study in all_files:
         ("x_scgpt", "scgpt"),
         ("x_scimilarity", "scimilarity"),
         ("x_geneformer", "geneformer"),
-        ("scfoundation_embeddings", "scfoundation"),
+        ("x_scfoundation", "scfoundation"),
         ("x_uce", "uce"),
     ]
     integration_methods = [
         ("X_pca", "pca"),
         ("X_pca_harmony", "harmony"),
         ("X_scvi", "scvi"),
-        ("X_pca_fastmnn", "fastmnn"),
         ("X_scanorama", "scanorama"),
         ('X_pca_combat', 'combat'),
     ]
@@ -343,3 +360,4 @@ for study in all_files:
     final_save_path = os.path.join(BASE_DIR, study.replace('_embeddings',''), f"{study.replace('_embeddings','')}_final_embeddings.h5ad")
     base_adata.write(final_save_path)
     print(f"Final AnnData object saved for {study.replace('_embeddings','')} at {final_save_path}")
+    gc.collect()

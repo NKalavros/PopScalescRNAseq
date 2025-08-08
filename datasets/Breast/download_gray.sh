@@ -45,5 +45,6 @@ adata.obs_names = adata.obs.index.tolist()
 # Ensure var_names are unique
 adata.var_names_make_unique()
 # Save the AnnData object
+adata.obs['Sample'] = [x.split('_')[0] for x in adata.obs_names]
 adata.write_h5ad('data.h5ad')
 "
