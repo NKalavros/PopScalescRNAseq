@@ -65,7 +65,7 @@ fi
 cd /gpfs/scratch/nk4167/KidneyAtlas/Braun
 mkdir -p embeddings
 if [ ! -f "embeddings/geneformer_helical.h5ad" ]; then
-    python /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/run_helical_geneformer.py  --input data.h5ad --output embeddings//geneformer_helical.h5ad
+    python /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/run_helical_geneformer.py  --input data.h5ad --output embeddings/geneformer_helical.h5ad
 fi
 
 

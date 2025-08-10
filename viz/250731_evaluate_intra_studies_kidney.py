@@ -14,8 +14,8 @@ import subprocess
 import gc
 # Set base directory (relative to script location)
 BASE_DIR = '/gpfs/scratch/nk4167/KidneyAtlas'  # Change this to your base directory
-N_OBS = 10000  # Number of observations to subsample for speed
-EMBEDDING_METHODS = ['scgpt', 'scimilarity', 'geneformer', 'scfoundation', 'uce']  # Embedding methods to evaluate
+N_OBS = 50000  # Number of observations to subsample for speed
+EMBEDDING_METHODS = ['scgpt', 'scimilarity', 'geneformer', 'scfoundation', 'uce','geneformer_helical']  # Embedding methods to evaluate
 DIRECTORIES_TO_EVALUATE = ['lake_scrna','lake_snrna', 'Abedini', 'SCP1288', 'Krishna', 'Braun']  # Directories to evaluate
 RUN_SCIB = True  # Whether to run scib evaluation
 RUN_SUBSET = True  # Whether to subsample the data
@@ -295,6 +295,7 @@ for study in all_files:
         ("x_geneformer", "geneformer"),
         ("x_scfoundation", "scfoundation"),
         ("x_uce", "uce"),
+        ('x_geneformer_helical', 'geneformer_helical'),
     ]
     integration_methods = [
         ("X_pca", "pca"),
@@ -351,6 +352,9 @@ for study in all_files:
             bm.prepare()
             bm.benchmark()
             bm.plot_results_table(show=False, min_max_scale=False,save_dir=os.path.join(BASE_DIR, study, 'figures'))
+            # Save the results to a CSV file
+            results_df = bm.get_results()
+            results_df.to_csv(os.path.join(BASE_DIR, study, 'figures', f'scib_results_{study}.csv'))
             os.system(f"rclone copy --progress {os.path.join(BASE_DIR, study, 'figures')} GDrive:KidneyAtlas/{study}/figures/")
             print(f"scIB evaluation complete for all integrations in {study}.")
         except Exception as e:

@@ -351,6 +351,8 @@ for study in all_files:
             )
             bm.prepare()
             bm.benchmark()
+            results_df = bm.get_results()
+            results_df.to_csv(os.path.join(BASE_DIR, study, 'figures', f'scib_results_{study}.csv'))
             bm.plot_results_table(show=False, min_max_scale=False,save_dir=os.path.join(BASE_DIR, study, 'figures'))
             os.system(f"rclone copy --progress {os.path.join(BASE_DIR, study, 'figures')} GDrive:BreastAtlas/{study}/figures/")
             print(f"scIB evaluation complete for all integrations in {study}.")

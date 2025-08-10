@@ -1,0 +1,13 @@
+1. Run models through helical
+    - Perform comparisons between my code and Helical - Done for Geneformer
+
+2. Evaluate inter study integration
+    - Compare foundation models
+    - Compare with scANVI, scPoli, Symphonypy, CellHint
+
+3. Complete embeddings for rest of the studies
+
+4. Add scMamba, mamba-ssm based packages, and transcriptformer
+
+5. Run the models on PanPDAC
+
