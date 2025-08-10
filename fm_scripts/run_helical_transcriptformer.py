@@ -31,7 +31,7 @@ def main():
 
     print(f"Arguments: {args}")
     os.chdir(args.workdir)
-    model_config = TranscriptFormerConfig(model_name="tf_sapiens")
+    model_config = TranscriptFormerConfig(model_name="tf_sapiens", batch_size=args.batch_size)
     transcriptformer = TranscriptFormer(configurer=model_config)
 
     adata = ad.read_h5ad(args.input_file)
