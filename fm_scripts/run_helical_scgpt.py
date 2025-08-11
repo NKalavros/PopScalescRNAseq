@@ -10,7 +10,7 @@ def main():
     parser.add_argument('--workdir', type=str, default='.', help='Working directory to change to')
     parser.add_argument('--batch_size', type=int, default=20, help='Batch size for Geneformer')
     parser.add_argument('--input_file', type=str, default='data.h5ad', required=False, help='Input h5ad file')
-    parser.add_argument('--output_file', type=str, default='embeddings/geneformer_scgpt.h5ad', help='Output h5ad file')
+    parser.add_argument('--output_file', type=str, default='embeddings/helical_scgpt.h5ad', help='Output h5ad file')
     args = parser.parse_args()
 
     print(f"Arguments: {args}")
@@ -19,6 +19,7 @@ def main():
     scgpt = scGPT(configurer = model_config)
 
     adata = ad.read_h5ad(args.input_file)
+    adata.var_names_make_unique()
     dataset = scgpt.process_data(adata)
     embeddings = scgpt.get_embeddings(dataset)
     adata.obsm['X_geneformer_scgpt'] = embeddings
