@@ -3,6 +3,7 @@ import argparse
 from helical.models.uce import UCE, UCEConfig # type: ignore
 import anndata as ad #type: ignore
 import os
+import numpy as np # type: ignore
 import torch #type: ignore
 
 def main():
@@ -11,18 +12,36 @@ def main():
     parser.add_argument('--batch_size', type=int, default=20, help='Batch size for Geneformer')
     parser.add_argument('--input_file', type=str, default='data.h5ad', required=False, help='Input h5ad file')
     parser.add_argument('--output_file', type=str, default='embeddings/helical_scgpt.h5ad', help='Output h5ad file')
+    parser.add_argument('--model_name', type=str, default='33l_8ep_1024t_1280', help='Model name')
     args = parser.parse_args()
 
     print(f"Arguments: {args}")
     os.chdir(args.workdir)
-    model_config = UCEConfig(batch_size=args.batch_size, device= "cuda" if torch.cuda.is_available() else "cpu")
+    model_config = UCEConfig(model_name= args.model_name,batch_size=args.batch_size, device= "cuda" if torch.cuda.is_available() else "cpu")
     uce = UCE(configurer = model_config)
 
     adata = ad.read_h5ad(args.input_file)
     adata.var_names_make_unique()
-    dataset = uce.process_data(adata)
-    embeddings = uce.get_embeddings(dataset)
-    adata.obsm['X_geneformer_uce'] = embeddings
+    batch_size = args.batch_size
+    # Batched embedding generation for lower RAM usage
+    # Initialize a list to store embeddings from each batch
+    all_embeddings = []
+
+    # Iterate over the data in batches
+    for start in range(0, adata.shape[0], batch_size):
+        end = min(start + batch_size, adata.shape[0])
+        ann_data_batch = adata[start:end].to_memory()
+
+        dataset_batch = uce.process_data(ann_data_batch)
+        embeddings_batch = uce.get_embeddings(dataset_batch)
+
+        all_embeddings.append(embeddings_batch)
+
+    # Concatenate the embeddings from each batch
+    all_embeddings = np.concatenate(all_embeddings, axis=0)
+    #dataset = uce.process_data(adata)
+    #embeddings = uce.get_embeddings(dataset)
+    adata.obsm['X_geneformer_uce'] = all_embeddings
 
     # Sanitize obs and var columns
     adata.obs.columns = adata.obs.columns.astype(str)
@@ -44,7 +63,7 @@ def main():
 
     adata.write(args.output_file)
 
-    print("Base model embeddings shape:", embeddings.shape)
+    print("Base model embeddings shape:", all_embeddings.shape)
 
 if __name__ == "__main__":
     main()
