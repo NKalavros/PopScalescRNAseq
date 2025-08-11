@@ -181,39 +181,38 @@ fi
 
 
 # Now let's do some more models - TranscriptFormer
-conda activate /gpfs/scratch/nk4167/miniconda/envs/helical-package
 cd /gpfs/scratch/nk4167/KidneyAtlas/lake_scrna
 mkdir -p embeddings
 if [ ! -f "embeddings/transcripformer.h5ad" ]; then
-    python /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/run_transcriptformer.sh
+    bash /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/run_transcriptformer.sh
 fi
 
 cd /gpfs/scratch/nk4167/KidneyAtlas/lake_snrna
 mkdir -p embeddings
 if [ ! -f "embeddings/transcripformer.h5ad" ]; then
-    python /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/run_transcriptformer.sh
+    bash /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/run_transcriptformer.sh
 fi
 
 cd /gpfs/scratch/nk4167/KidneyAtlas/Abedini
 mkdir -p embeddings
 if [ ! -f "embeddings/transcripformer.h5ad" ]; then
-    python /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/run_transcriptformer.sh
+    bash /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/run_transcriptformer.sh
 fi
 
 cd /gpfs/scratch/nk4167/KidneyAtlas/SCP1288
 mkdir -p embeddings
 if [ ! -f "embeddings/transcripformer.h5ad" ]; then
-    python /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/run_transcriptformer.sh
+    bash /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/run_transcriptformer.sh
 fi
 
 cd /gpfs/scratch/nk4167/KidneyAtlas/Krishna
 mkdir -p embeddings
 if [ ! -f "embeddings/transcripformer.h5ad" ]; then
-    python /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/run_transcriptformer.sh
+    bash /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/run_transcriptformer.sh
 fi
 cd /gpfs/scratch/nk4167/KidneyAtlas/Braun
 mkdir -p embeddings
 if [ ! -f "embeddings/transcripformer.h5ad" ]; then
-    python /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/run_transcriptformer.sh
+    bash /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/run_transcriptformer.sh
 fi
 
