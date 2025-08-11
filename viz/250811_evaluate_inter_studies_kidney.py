@@ -1,0 +1,423 @@
+"""
+Inter-study evaluation script.
+
+Goals (initial version):
+1. Load final embedding AnnData files from multiple study directories.
+2. Concatenate them into a single AnnData object for inter-study benchmarking.
+3. Add two batch-related metadata columns:
+   - Existing library-level batch key (LIBRARY_KEY) already present in per-study objects.
+   - New Study key derived from directory / study name.
+4. Provide an optional LLM-powered helper to standardize (harmonize) cell type labels across studies.
+   (Not executed by default; requires OPENAI_API_KEY and network access.)
+5. Save the combined AnnData plus (optionally) a JSON mapping of harmonized labels.
+
+Future (not yet implemented):
+- Run cross-study batch correction metrics (scIB) using both batch keys (study vs library) in separate benchmark runs.
+- Allow selecting subset of embeddings / dimensionality reductions for evaluation.
+
+This script is intentionally modular and side-effect light so it can be imported.
+"""
+from __future__ import annotations
+import os
+import json
+import time
+from typing import Dict, List, Optional, Tuple
+
+import scanpy as sc  # type: ignore
+import anndata as ad  # type: ignore
+import pandas as pd  # type: ignore
+
+# ------------------------------- Configuration ---------------------------------
+BASE_DIR = '/gpfs/scratch/nk4167/KidneyAtlas'  # Adjust as needed
+STUDIES: List[str] = [
+    'lake_scrna', 'lake_snrna', 'Abedini', 'SCP1288', 'Krishna', 'Braun'
+]
+FINAL_SUFFIX = '_final_embeddings.h5ad'
+LIBRARY_KEY = 'library_id'
+CELL_TYPE_KEY = 'cell_type'
+STUDY_KEY = 'study'  # New key we add
+RUN_LLM_STANDARDIZATION = True  # Set True to attempt LLM-based label harmonization
+LLM_MODEL = 'gpt-4o'  # Change if desired
+LLM_TEMPERATURE = 0.0
+LLM_MAX_RETRIES = 3
+LLM_SLEEP_BETWEEN_RETRIES = 5
+LLM_USE_STRUCTURED = True  # Attempt JSON schema structured output (newer SDKs)
+OUTPUT_COMBINED_FILENAME = 'interstudy_combined.h5ad'
+LABEL_MAPPING_JSON = 'interstudy_celltype_mapping.json'
+MAX_STANDARD_LABELS = 30  # Hard cap for standardized labels
+RUN_SYMPHONY = True  # Run Symphony inter-study mapping & label transfer evaluation
+SYMPHONY_MODULE_FILENAME = '250811_interstudy_symphony.py'  # File containing run_symphony_interstudy
+SYMPHONY_METRICS_CSV = 'symphony_interstudy_metrics.csv'
+RUN_SCPOLI = True  # Run scPoli inter-study integration & label transfer
+SCPOLI_MODULE_FILENAME = '250811_interstudy_scpoli.py'
+SCPOLI_METRICS_CSV = 'scpoli_interstudy_metrics.csv'
+
+# ------------------------------- Utilities -------------------------------------
+
+def find_final_file(study: str, base_dir: str = BASE_DIR, suffix: str = FINAL_SUFFIX) -> Optional[str]:
+    """Return path to the expected final embeddings file if it exists."""
+    candidate = os.path.join(base_dir, study, f"{study}{suffix}")
+    return candidate if os.path.isfile(candidate) else None
+
+
+def load_studies(studies: List[str]) -> List[ad.AnnData]:
+    """Load available studies' final embeddings AnnData objects, adding study key.
+
+    Skips studies whose final file is missing. Warns if required metadata keys are missing.
+    """
+    adatas: List[ad.AnnData] = []
+    for s in studies:
+        path = find_final_file(s)
+        if not path:
+            print(f"[WARN] Final embeddings file not found for study '{s}', skipping.")
+            continue
+        print(f"[INFO] Loading {path}")
+        a = sc.read_h5ad(path)
+        # add study key
+        a.obs[STUDY_KEY] = s
+        # Ensure categorical types
+        for key in [LIBRARY_KEY, CELL_TYPE_KEY, STUDY_KEY]:
+            if key in a.obs:
+                a.obs[key] = a.obs[key].astype(str).astype('category')
+            else:
+                print(f"[WARN] Key '{key}' missing in study '{s}'.")
+        adatas.append(a)
+    return adatas
+
+
+def concatenate(adatas: List[ad.AnnData]) -> ad.AnnData:
+    """Concatenate multiple AnnData objects aligning variables (outer join)."""
+    if not adatas:
+        raise ValueError("No AnnData objects provided for concatenation.")
+    print(f"[INFO] Concatenating {len(adatas)} studies...")
+    combined = ad.concat(adatas, join='outer', label=STUDY_KEY, keys=[a.obs[STUDY_KEY].unique()[0] for a in adatas])
+    # Reinforce categorical types
+    for key in [LIBRARY_KEY, CELL_TYPE_KEY, STUDY_KEY]:
+        if key in combined.obs:
+            combined.obs[key] = combined.obs[key].astype(str).astype('category')
+    print(f"[INFO] Combined shape: {combined.shape}")
+    return combined
+
+# -------------------- LLM-based label harmonization helper ---------------------
+LLM_SYSTEM_PROMPT = (
+    "You are a domain expert harmonizing single-cell RNA-seq cell type labels across datasets. "
+    "Given a list of raw labels, produce a concise JSON object mapping each ORIGINAL label to a STANDARD label. "
+    "Rules: (1) Preserve biologically meaningful granularity (e.g., 'CD4+ T cell' not just 'T cell' unless overly specific). "
+    "(2) Use consistent capitalization (Title Case except common markers like CD4+). "
+    "(3) If two labels are clear synonyms, map both to a single standard form. "
+    "(4) Return ONLY valid JSON (no markdown) with keys as original labels and values as standardized labels. "
+    f"(5) Limit the TOTAL number of UNIQUE standardized labels to at most {MAX_STANDARD_LABELS} by merging related or rare originals into broader canonical categories (e.g., merge granular T cell activation states into 'CD4+ T Cell' or 'CD8+ T Cell'). "
+    f"(6) Prefer biologically meaningful parent types over 'Other'; only use 'Other' if absolutely necessary to stay within {MAX_STANDARD_LABELS}."
+)
+
+
+def _call_openai(
+    messages: List[Dict[str, str]],
+    model: str = LLM_MODEL,
+    temperature: float = LLM_TEMPERATURE,
+    response_format: Optional[dict] = None,
+) -> str:
+    """Internal: call OpenAI Chat Completions API (current stable) with fallbacks.
+
+    We first attempt the modern client.chat.completions.create pathway. If unavailable, try legacy
+    openai.ChatCompletion.create. Expects 'messages' list of dicts.
+    """
+    api_key = os.getenv('OPENAI_API_KEY')
+    if not api_key:
+        raise RuntimeError("OPENAI_API_KEY not set in environment; cannot call LLM.")
+    try:
+        # New style
+        from openai import OpenAI  # type: ignore
+        client = OpenAI(api_key=api_key)
+        try:
+            kwargs = dict(model=model, messages=messages, temperature=temperature)
+            if response_format is not None:
+                # Newer SDKs: response_format expects a dict schema; add defensively.
+                # type: ignore[arg-type]
+                kwargs["response_format"] = response_format  # type: ignore
+            resp = client.chat.completions.create(**kwargs)
+            # Standard shape: resp.choices[0].message.content
+            if hasattr(resp, 'choices') and resp.choices:
+                choice0 = resp.choices[0]
+                # Different SDK versions may store content under message or directly
+                content = None
+                if hasattr(choice0, 'message') and getattr(choice0.message, 'content', None):
+                    content = choice0.message.content
+                elif hasattr(choice0, 'text'):
+                    content = choice0.text
+                if not content:
+                    content = str(resp)
+                return content
+        except AttributeError:
+            # Fallback to legacy import path
+            pass
+    except Exception:
+        # Legacy global namespace fallback
+        pass
+    # Legacy fallback: openai.ChatCompletion
+    try:  # pragma: no cover - network/SDK dependent
+        import openai  # type: ignore
+        openai.api_key = api_key  # type: ignore[attr-defined]
+        # Legacy interface ignores response_format
+        resp = openai.ChatCompletion.create(  # type: ignore[attr-defined]
+            model=model,
+            messages=messages,
+            temperature=temperature,
+        )
+        if 'choices' in resp and resp['choices']:
+            return resp['choices'][0]['message']['content']
+        return str(resp)
+    except Exception as e:  # pragma: no cover
+        raise RuntimeError(f"All OpenAI chat completion attempts failed: {e}")
+
+
+def _build_mapping_schema() -> dict:
+    """Return JSON schema dict for structured cell type mapping output.
+
+    The model should return an object with one property 'mappings': array of {original, standard} objects.
+    """
+    return {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "cell_type_mapping",
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "mappings": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "original": {"type": "string"},
+                                "standard": {"type": "string"},
+                            },
+                            "required": ["original", "standard"],
+                            "additionalProperties": False,
+                        },
+                        "minItems": 1,
+                    }
+                },
+                "required": ["mappings"],
+                "additionalProperties": False,
+            },
+        },
+    }
+
+
+def generate_cell_type_mapping(raw_labels: List[str], model: str = LLM_MODEL) -> Dict[str, str]:
+    """Call LLM to produce mapping original_label -> standardized_label.
+
+    Returns mapping. Raises on failure.
+    """
+    unique_labels = sorted(set(l for l in raw_labels if l and l.lower() != 'nan'))
+    user_prompt = (
+        "Here are the cell type labels to harmonize (one per line):\n" + "\n".join(unique_labels)
+    )
+    messages = [
+        {"role": "system", "content": LLM_SYSTEM_PROMPT + (" Return structured JSON per schema if provided." if LLM_USE_STRUCTURED else "")},
+        {"role": "user", "content": user_prompt},
+    ]
+
+    last_err: Optional[Exception] = None
+    adaptive_messages = list(messages)
+    for attempt in range(1, LLM_MAX_RETRIES + 1):
+        try:
+            response_format = _build_mapping_schema() if LLM_USE_STRUCTURED else None
+            raw = _call_openai(adaptive_messages, model=model, response_format=response_format)
+            # First try structured schema pathway (object with mappings array)
+            parsed = json.loads(raw)
+            mapping: Dict[str, str] = {}
+            if isinstance(parsed, dict) and 'mappings' in parsed and isinstance(parsed['mappings'], list):
+                for item in parsed['mappings']:
+                    if isinstance(item, dict) and 'original' in item and 'standard' in item:
+                        o = str(item['original']).strip()
+                        s = str(item['standard']).strip()
+                        if o:
+                            mapping[o] = s or o
+            elif isinstance(parsed, dict):
+                # Fallback: assume direct mapping original->standard
+                mapping = {str(k): str(v) for k, v in parsed.items()}
+            else:
+                raise ValueError("Unexpected JSON shape for mapping.")
+            # Identity fill-ins
+            for lbl in unique_labels:
+                mapping.setdefault(lbl, lbl)
+            unique_standard = list(dict.fromkeys(mapping.values()))
+            if len(unique_standard) <= MAX_STANDARD_LABELS:
+                return mapping
+            print(f"[WARN] Attempt {attempt}: LLM produced {len(unique_standard)} standardized labels (> {MAX_STANDARD_LABELS}). Retrying with stricter instructions.")
+            overflow_sample = unique_standard[MAX_STANDARD_LABELS:MAX_STANDARD_LABELS+10]
+            reduction_hint = (
+                f"You produced {len(unique_standard)} unique standardized labels which exceeds the limit of {MAX_STANDARD_LABELS}. "
+                f"Please merge semantically similar or rare subtypes so the final total is <= {MAX_STANDARD_LABELS}. "
+                f"Overflow examples: {overflow_sample}. Return ONLY the final mapping JSON."
+            )
+            adaptive_messages.append({"role": "user", "content": reduction_hint})
+            continue
+        except Exception as e:  # pragma: no cover - network dependent
+            last_err = e
+            print(f"[WARN] LLM attempt {attempt} failed: {e}")
+            if attempt < LLM_MAX_RETRIES:
+                print(f"[INFO] Sleeping {LLM_SLEEP_BETWEEN_RETRIES}s before retry...")
+                time.sleep(LLM_SLEEP_BETWEEN_RETRIES)
+    raise RuntimeError(f"LLM mapping generation failed after {LLM_MAX_RETRIES} attempts (last error or still >{MAX_STANDARD_LABELS} labels): {last_err}")
+
+
+def apply_cell_type_mapping(adata: ad.AnnData, mapping: Dict[str, str], cell_type_key: str = CELL_TYPE_KEY) -> None:
+    """In-place replacement of cell type labels using mapping."""
+    if cell_type_key not in adata.obs:
+        raise KeyError(f"'{cell_type_key}' not in adata.obs")
+    adata.obs[cell_type_key] = adata.obs[cell_type_key].astype(str).map(mapping).astype('category')
+
+# -------------------- DataFrame sanitation (obs) before writing ---------------
+def sanitize_obs(adata: ad.AnnData) -> None:
+    """Sanitize adata.obs columns to avoid h5py write errors.
+
+    Converts object dtyped columns to either numeric (if all scalar numeric) or string.
+    Ensures no python list/dict objects remain. Updates in place.
+    """
+    to_convert: List[str] = []
+    for col in adata.obs.columns:
+        ser = adata.obs[col]
+        if ser.dtype == 'O':
+            # Check if all entries are scalar numerics / NaNs
+            def _is_scalar_numeric(x):
+                return (isinstance(x, (int, float)) and not isinstance(x, bool)) or pd.isna(x)
+            if ser.map(_is_scalar_numeric).all():
+                try:
+                    adata.obs[col] = pd.to_numeric(ser, errors='coerce')
+                    print(f"[SANITIZE] Converted object numeric column '{col}' -> float")
+                    continue
+                except Exception:
+                    pass
+            # Fallback: stringify complex objects (lists, dicts, sets, tuples, mixed types)
+            adata.obs[col] = ser.map(lambda v: 'NA' if pd.isna(v) else str(v))
+            print(f"[SANITIZE] Stringified object column '{col}'")
+        # Re-cast categories to avoid stale categories referencing objects
+        if isinstance(adata.obs[col].dtype, pd.CategoricalDtype):
+            adata.obs[col] = adata.obs[col].astype(str).astype('category')
+    # Specific safeguard for commonly problematic count columns
+    for special in ['nCount_RNA', 'nFeature_RNA']:
+        if special in adata.obs:
+            try:
+                adata.obs[special] = pd.to_numeric(adata.obs[special], errors='coerce')
+            except Exception:
+                pass
+
+# ------------------------------- Main Flow -------------------------------------
+
+def main():
+    adatas = load_studies(STUDIES)
+    if not adatas:
+        print("[ERROR] No studies loaded; exiting.")
+        return
+    combined = concatenate(adatas)
+
+    mapping: Optional[Dict[str, str]] = None
+    if RUN_LLM_STANDARDIZATION and CELL_TYPE_KEY in combined.obs:
+        print("[INFO] Generating LLM-based cell type mapping...")
+        try:
+            mapping = generate_cell_type_mapping(list(combined.obs[CELL_TYPE_KEY].astype(str).unique()))
+            print(f"[INFO] Mapping size: {len(mapping)}")
+            apply_cell_type_mapping(combined, mapping, CELL_TYPE_KEY)
+        except Exception as e:
+            print(f"[WARN] LLM standardization skipped due to error: {e}")
+            mapping = None
+    else:
+        if not RUN_LLM_STANDARDIZATION:
+            print("[INFO] RUN_LLM_STANDARDIZATION is False; skipping label harmonization.")
+
+    # Save artifacts
+    out_path = os.path.join(BASE_DIR, OUTPUT_COMBINED_FILENAME)
+    print(f"[INFO] Writing combined AnnData to {out_path}")
+    # Sanitize obs to prevent h5py TypeError (e.g., mixed object dtypes like 'nCount_RNA')
+    sanitize_obs(combined)
+    combined.write(out_path)
+
+    # Optional: Symphony inter-study evaluation (largest study as reference)
+    if RUN_SYMPHONY:
+        try:
+            import importlib.util, importlib.machinery
+            symphony_path = os.path.join(os.path.dirname(__file__), SYMPHONY_MODULE_FILENAME)
+            if os.path.isfile(symphony_path):
+                spec = importlib.util.spec_from_file_location('interstudy_symphony_mod', symphony_path)
+                if spec and spec.loader:
+                    symphony_mod = importlib.util.module_from_spec(spec)
+                    spec.loader.exec_module(symphony_mod)  # type: ignore[attr-defined]
+                    if hasattr(symphony_mod, 'run_symphony_interstudy'):
+                        print('[INFO] Running Symphony inter-study mapping...')
+                        metrics_df, ref_study = symphony_mod.run_symphony_interstudy(
+                            combined,
+                            study_key=STUDY_KEY,
+                            batch_key=LIBRARY_KEY,
+                            cell_type_key=CELL_TYPE_KEY,
+                            add_embedding=True,
+                            embedding_key='X_symphony',
+                        )
+                        metrics_csv_path = os.path.join(BASE_DIR, SYMPHONY_METRICS_CSV)
+                        metrics_df.to_csv(metrics_csv_path, index=False)
+                        print(f"[INFO] Symphony metrics saved to {metrics_csv_path} (reference={ref_study})")
+                    else:
+                        print('[WARN] run_symphony_interstudy not found in Symphony module; skipping.')
+                else:
+                    print('[WARN] Could not load Symphony module spec; skipping.')
+            else:
+                print('[WARN] Symphony module file not found; skipping inter-study mapping.')
+        except Exception as e:  # pragma: no cover
+            print(f"[WARN] Symphony inter-study evaluation failed: {e}")
+
+    # Optional: scPoli inter-study evaluation
+    if RUN_SCPOLI:
+        try:
+            import importlib.util
+            scpoli_path = os.path.join(os.path.dirname(__file__), SCPOLI_MODULE_FILENAME)
+            if os.path.isfile(scpoli_path):
+                spec = importlib.util.spec_from_file_location('interstudy_scpoli_mod', scpoli_path)
+                if spec and spec.loader:
+                    scpoli_mod = importlib.util.module_from_spec(spec)
+                    spec.loader.exec_module(scpoli_mod)  # type: ignore[attr-defined]
+                    if hasattr(scpoli_mod, 'run_scpoli_interstudy'):
+                        print('[INFO] Running scPoli inter-study integration...')
+                        scpoli_metrics_df, scpoli_ref = scpoli_mod.run_scpoli_interstudy(
+                            combined,
+                            study_key=STUDY_KEY,
+                            batch_key=LIBRARY_KEY,
+                            cell_type_key=CELL_TYPE_KEY,
+                            embedding_key='X_scpoli',
+                        )
+                        scpoli_csv = os.path.join(BASE_DIR, SCPOLI_METRICS_CSV)
+                        scpoli_metrics_df.to_csv(scpoli_csv, index=False)
+                        print(f"[INFO] scPoli metrics saved to {scpoli_csv} (reference={scpoli_ref})")
+                    else:
+                        print('[WARN] run_scpoli_interstudy not found in scPoli module; skipping.')
+                else:
+                    print('[WARN] Could not load scPoli module spec; skipping.')
+            else:
+                print('[WARN] scPoli module file not found; skipping inter-study scPoli integration.')
+        except Exception as e:  # pragma: no cover
+            print(f"[WARN] scPoli inter-study integration failed: {e}")
+
+    if mapping:
+        mapping_path = os.path.join(BASE_DIR, LABEL_MAPPING_JSON)
+        print(f"[INFO] Writing label mapping JSON to {mapping_path}")
+        with open(mapping_path, 'w') as f:
+            json.dump(mapping, f, indent=2)
+
+    print("[DONE] Inter-study combination complete.")
+
+if __name__ == '__main__':  # pragma: no cover
+    main()
+    adata = ad.read_h5ad(os.path.join(BASE_DIR, OUTPUT_COMBINED_FILENAME))
+    print(f"Combined AnnData loaded with shape {adata.shape} and obs keys: {', '.join(adata.obs.keys())}")
+    if LABEL_MAPPING_JSON in os.listdir(BASE_DIR):
+        # Print number of celltypes
+        adata.obs[CELL_TYPE_KEY] = adata.obs[CELL_TYPE_KEY].astype(str)
+        unique_cell_types = adata.obs[CELL_TYPE_KEY].unique()
+        print(f"Unique cell types in combined data: {len(unique_cell_types)}")
+        print(f"Unique cell types: {', '.join(unique_cell_types)}")
+        with open(os.path.join(BASE_DIR, LABEL_MAPPING_JSON), 'r') as f:
+            mapping = json.load(f)
+            
+        print(f"Loaded cell type mapping with {len(mapping)} entries.")
+    else:
+        print(f"No label mapping JSON found at {LABEL_MAPPING_JSON}. Skipping label harmonization check.")
