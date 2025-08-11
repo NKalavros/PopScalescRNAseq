@@ -10,13 +10,12 @@ def main():
     parser.add_argument('--workdir', type=str, default='.', help='Working directory to change to')
     parser.add_argument('--batch_size', type=int, default=20, help='Batch size for Geneformer')
     parser.add_argument('--input_file', type=str, default='data.h5ad', required=False, help='Input h5ad file')
-    parser.add_argument('--output_file', type=str, default='embeddings/geneformer_helical.h5ad', help='Output h5ad file')
-    parser.add_argument('--model_name', type=str, default='gf-18L-316M-i4096',help='Name of the model to use')
+    parser.add_argument('--output_file', type=str, default='embeddings/geneformer_scgpt.h5ad', help='Output h5ad file')
     args = parser.parse_args()
 
     print(f"Arguments: {args}")
     os.chdir(args.workdir)
-    model_config = scGPTConfig(model_name = args.model_name,batch_size=args.batch_size, device= "cuda" if torch.cuda.is_available() else "cpu")
+    model_config = scGPTConfig(batch_size=args.batch_size, device= "cuda" if torch.cuda.is_available() else "cpu")
     scgpt = scGPT(configurer = model_config)
 
     adata = ad.read_h5ad(args.input_file)
