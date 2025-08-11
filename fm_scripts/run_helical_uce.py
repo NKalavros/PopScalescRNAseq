@@ -11,7 +11,7 @@ def main():
     parser.add_argument('--workdir', type=str, default='.', help='Working directory to change to')
     parser.add_argument('--batch_size', type=int, default=20, help='Batch size for Geneformer')
     parser.add_argument('--input_file', type=str, default='data.h5ad', required=False, help='Input h5ad file')
-    parser.add_argument('--output_file', type=str, default='embeddings/helical_scgpt.h5ad', help='Output h5ad file')
+    parser.add_argument('--output_file', type=str, default='embeddings/uce_helical.h5ad', help='Output h5ad file')
     parser.add_argument('--model_name', type=str, default='33l_8ep_1024t_1280', help='Model name')
     args = parser.parse_args()
 
