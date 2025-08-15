@@ -38,16 +38,15 @@ def main():
     #    end = min(start + batch_size_loop, adata.shape[0])
     #    ann_data_batch = adata[start:end].to_memory()
 
-    dataset_batch = uce.process_data(ann_data_batch)
-    embeddings_batch = uce.get_embeddings(dataset_batch)
+    dataset_processed = uce.process_data(adata)
+    embeddings = uce.get_embeddings(dataset_processed)
 
     #all_embeddings.append(embeddings_batch)
 
     # Concatenate the embeddings from each batch
-    all_embeddings = embeddings_batch
     #dataset = uce.process_data(adata)
     #embeddings = uce.get_embeddings(dataset)
-    adata.obsm['X_geneformer_uce'] = all_embeddings
+    adata.obsm['X_geneformer_uce'] = embeddings
 
     # Sanitize obs and var columns
     adata.obs.columns = adata.obs.columns.astype(str)
