@@ -28,10 +28,21 @@ def main():
     adata.var_names_make_unique()
     # Ensure we are looking at counts
     print(adata.X.min(), adata.X.max())
-    # If adata.X is not in csr format, convert it
-    if not isinstance(adata.X, np.ndarray):
-        # convert to csr
-        adata.X = adata.X.tocsr().copy()
+    import scipy.sparse as sp
+
+    # ensure adata.X is a CSR sparse matrix
+    if isinstance(adata.X, np.ndarray):
+        adata.X = sp.csr_matrix(adata.X.copy())
+    elif sp.issparse(adata.X):
+        if not isinstance(adata.X, sp.csr_matrix):
+            adata.X = adata.X.tocsr(copy=True)
+    else:
+        # try to coerce other array-like types
+        try:
+            adata.X = sp.csr_matrix(adata.X.copy())
+        except Exception as e:
+            raise TypeError(f"Unsupported adata.X type ({type(adata.X)}): {e}")
+
     # Check class of adata.X
     print(type(adata.X))
     dataset = uce.process_data(adata)
