@@ -26,6 +26,12 @@ def main():
 
     adata = ad.read_h5ad(args.input_file)
     adata.var_names_make_unique()
+    # Ensure we are looking at counts
+    print(adata.X.min(), adata.X.max())
+    # If adata.X is not in csr format, convert it
+    if not isinstance(adata.X, np.ndarray):
+        # convert to csr
+        adata.X = adata.X.tocsr()
     # Batched embedding generation for lower RAM usage
     # Initialize a list to store embeddings from each batch
     all_embeddings = []
