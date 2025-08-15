@@ -31,27 +31,14 @@ def main():
     # If adata.X is not in csr format, convert it
     if not isinstance(adata.X, np.ndarray):
         # convert to csr
-        adata.X = adata.X.tocsr()
-    # Batched embedding generation for lower RAM usage
-    # Initialize a list to store embeddings from each batch
-    all_embeddings = []
-    # If batch size is 0, just do all the dataset
-    if batch_size <= 0 or batch_size > adata.shape[0]:
-        batch_size_loop = adata.shape[0]
-    print(f"Using batch size: {batch_size}")
-    # Iterate over the data in batches
-    #for start in range(0, adata.shape[0], batch_size_loop):
-    #    end = min(start + batch_size_loop, adata.shape[0])
-    #    ann_data_batch = adata[start:end].to_memory()
+        adata.X = adata.X.tocsr().copy()
+    # Check class of adata.X
+    print(type(adata.X))
+    dataset = uce.process_data(adata)
+    embeddings = uce.get_embeddings(dataset)
 
-    dataset_processed = uce.process_data(adata)
-    embeddings = uce.get_embeddings(dataset_processed)
 
-    #all_embeddings.append(embeddings_batch)
 
-    # Concatenate the embeddings from each batch
-    #dataset = uce.process_data(adata)
-    #embeddings = uce.get_embeddings(dataset)
     adata.obsm['X_geneformer_uce'] = embeddings
 
     # Sanitize obs and var columns
