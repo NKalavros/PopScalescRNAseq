@@ -17,18 +17,21 @@ def main():
 
     print(f"Arguments: {args}")
     os.chdir(args.workdir)
-    model_config = UCEConfig(model_name= args.model_name,batch_size=args.batch_size, device= "cuda" if torch.cuda.is_available() else "cpu")
+    if args.batch_size <= 0:
+        batch_size= 256
+    else:
+        batch_size = args.batch_size
+    model_config = UCEConfig(model_name= args.model_name,batch_size=batch_size, device= "cuda" if torch.cuda.is_available() else "cpu")
     uce = UCE(configurer = model_config)
 
     adata = ad.read_h5ad(args.input_file)
     adata.var_names_make_unique()
-    batch_size = args.batch_size
     # Batched embedding generation for lower RAM usage
     # Initialize a list to store embeddings from each batch
     all_embeddings = []
     # If batch size is 0, just do all the dataset
     if batch_size <= 0 or batch_size > adata.shape[0]:
-        batch_size = adata.shape[0]
+        batch_size_loop = adata.shape[0]
     print(f"Using batch size: {batch_size}")
     # Iterate over the data in batches
     for start in range(0, adata.shape[0], batch_size):
