@@ -14,8 +14,8 @@ import subprocess
 import gc
 # Set base directory (relative to script location)
 BASE_DIR = '/gpfs/scratch/nk4167/KidneyAtlas'  # Change this to your base directory
-N_OBS = 50000  # Number of observations to subsample for speed
-EMBEDDING_METHODS = ['scgpt', 'scimilarity', 'geneformer', 'scfoundation', 'uce','geneformer_helical']  # Embedding methods to evaluate
+N_OBS = 20000  # Number of observations to subsample for speed
+EMBEDDING_METHODS = ['scgpt', 'scimilarity', 'geneformer', 'scfoundation', 'uce','geneformer_helical','scgpt_helical','transcriptformer']  # Embedding methods to evaluate
 DIRECTORIES_TO_EVALUATE = ['lake_scrna','lake_snrna', 'Abedini', 'SCP1288', 'Krishna', 'Braun']  # Directories to evaluate
 RUN_SCIB = True  # Whether to run scib evaluation
 RUN_SUBSET = True  # Whether to subsample the data
@@ -182,6 +182,10 @@ for study in all_files:
             print(f"Loading embedding: {file_path}")
             if file_path.endswith('.h5ad'):
                 adata_tmp = sc.read_h5ad(file_path)
+                # Specialized transcriptformer handling
+                if method.lower() == 'transcriptformer':
+                    if 'embeddings' in adata_tmp.obsm:
+                        adata_tmp.obs_names = stored_obs_names
             # This branch will never actually happen now
             elif file_path.endswith('.csv'):
                 adata_tmp = sc.read_csv(file_path)
@@ -214,6 +218,9 @@ for study in all_files:
                 rep_key = 'x_geneformer'
             elif method == 'scfoundation':
                 rep_key = 'scfoundation_embeddings'
+            # Specialized handling for transcriptformer
+            elif method == 'transcriptformer':
+                rep_key = 'embeddings'
             else:
                 rep_key = f"x_{method.lower()}"
             if rep_key in adata_tmp.obsm:
@@ -223,6 +230,8 @@ for study in all_files:
                     # Introducing a minor name change here for extra consistency.
                     if rep_key != 'scfoundation_embeddings':
                         rep_key_new = rep_key
+                    elif rep_key == 'transcritformer':
+                        rep_key_new = 'x_transcriptformer'
                     else:
                         rep_key_new = 'x_scfoundation'
                     base_adata.obsm[rep_key_new] = arr
@@ -296,6 +305,8 @@ for study in all_files:
         ("x_scfoundation", "scfoundation"),
         ("x_uce", "uce"),
         ('x_geneformer_helical', 'geneformer_helical'),
+        ('x_scgpt_helical', 'scgpt_helical'),
+        ('x_transcriptformer', 'transcriptformer')
     ]
     integration_methods = [
         ("X_pca", "pca"),

@@ -51,6 +51,18 @@ SYMPHONY_METRICS_CSV = 'symphony_interstudy_metrics.csv'
 RUN_SCPOLI = True  # Run scPoli inter-study integration & label transfer
 SCPOLI_MODULE_FILENAME = '250811_interstudy_scpoli.py'
 SCPOLI_METRICS_CSV = 'scpoli_interstudy_metrics.csv'
+RUN_SCARCHES = True  # Run scArches (SCANVI surgery) inter-study integration
+SCARCHES_MODULE_FILENAME = '250811_interstudy_scarches.py'
+SCARCHES_METRICS_CSV = 'scarches_interstudy_metrics.csv'
+RUN_SCIB = True  # Run scIB benchmarking across embeddings
+SCIB_MODULE_FILENAME = '250811_interstudy_scib.py'
+SCIB_METRICS_CSV = 'scib_metrics_long.csv'
+SCIB_EMBEDDINGS: List[str] = [
+    'X_symphony', 'X_scpoli', 'X_scarches',  # integration methods
+    # Potential foundation model embeddings (add if present):
+    'X_geneformer', 'X_scgpt', 'X_uce', 'X_scfoundation', 'X_cellfm', 'X_transcriptformer'
+]
+SCIB_BATCH_KEYS: List[str] = [STUDY_KEY, LIBRARY_KEY]
 
 # ------------------------------- Utilities -------------------------------------
 
@@ -329,10 +341,8 @@ def main():
 
     # Save artifacts
     out_path = os.path.join(BASE_DIR, OUTPUT_COMBINED_FILENAME)
-    print(f"[INFO] Writing combined AnnData to {out_path}")
     # Sanitize obs to prevent h5py TypeError (e.g., mixed object dtypes like 'nCount_RNA')
     sanitize_obs(combined)
-    combined.write(out_path)
 
     # Optional: Symphony inter-study evaluation (largest study as reference)
     if RUN_SYMPHONY:
@@ -397,12 +407,82 @@ def main():
         except Exception as e:  # pragma: no cover
             print(f"[WARN] scPoli inter-study integration failed: {e}")
 
+    # Optional: scArches (SCANVI surgery) inter-study evaluation
+    if RUN_SCARCHES:
+        try:
+            import importlib.util
+            scarches_path = os.path.join(os.path.dirname(__file__), SCARCHES_MODULE_FILENAME)
+            if os.path.isfile(scarches_path):
+                spec = importlib.util.spec_from_file_location('interstudy_scarches_mod', scarches_path)
+                if spec and spec.loader:
+                    scarches_mod = importlib.util.module_from_spec(spec)
+                    spec.loader.exec_module(scarches_mod)  # type: ignore[attr-defined]
+                    if hasattr(scarches_mod, 'run_scarches_interstudy'):
+                        print('[INFO] Running scArches (SCANVI surgery) inter-study integration...')
+                        scarches_metrics_df, scarches_ref = scarches_mod.run_scarches_interstudy(
+                            combined,
+                            base_dir=BASE_DIR,
+                            study_key=STUDY_KEY,
+                            batch_key=LIBRARY_KEY,
+                            cell_type_key=CELL_TYPE_KEY,
+                            embedding_key='X_scarches',
+                        )
+                        scarches_csv = os.path.join(BASE_DIR, SCARCHES_METRICS_CSV)
+                        scarches_metrics_df.to_csv(scarches_csv, index=False)
+                        print(f"[INFO] scArches metrics saved to {scarches_csv} (reference={scarches_ref})")
+                    else:
+                        print('[WARN] run_scarches_interstudy not found in scArches module; skipping.')
+                else:
+                    print('[WARN] Could not load scArches module spec; skipping.')
+            else:
+                print('[WARN] scArches module file not found; skipping inter-study scArches integration.')
+        except Exception as e:  # pragma: no cover
+            print(f"[WARN] scArches inter-study integration failed: {e}")
+
     if mapping:
         mapping_path = os.path.join(BASE_DIR, LABEL_MAPPING_JSON)
         print(f"[INFO] Writing label mapping JSON to {mapping_path}")
         with open(mapping_path, 'w') as f:
             json.dump(mapping, f, indent=2)
 
+    # Optional: scIB benchmarking
+    if RUN_SCIB:
+        try:
+            import importlib.util
+            scib_path = os.path.join(os.path.dirname(__file__), SCIB_MODULE_FILENAME)
+            if os.path.isfile(scib_path):
+                spec = importlib.util.spec_from_file_location('interstudy_scib_mod', scib_path)
+                if spec and spec.loader:
+                    scib_mod = importlib.util.module_from_spec(spec)
+                    spec.loader.exec_module(scib_mod)  # type: ignore[attr-defined]
+                    if hasattr(scib_mod, 'run_scib_benchmark'):
+                        print('[INFO] Running scIB benchmarking over embeddings...')
+                        present_embeddings = [k for k in SCIB_EMBEDDINGS if k in combined.obsm]
+                        if not present_embeddings:
+                            print('[WARN] No specified scIB embeddings present in adata.obsm; skipping scIB.')
+                        else:
+                            scib_df = scib_mod.run_scib_benchmark(
+                                combined,
+                                embedding_keys=present_embeddings,
+                                batch_keys=SCIB_BATCH_KEYS,
+                                label_key=CELL_TYPE_KEY,
+                                fast=True,
+                                slim=False,
+                                full=False,
+                            )
+                            scib_csv = os.path.join(BASE_DIR, SCIB_METRICS_CSV)
+                            scib_df.to_csv(scib_csv, index=False)
+                            print(f"[INFO] scIB metrics saved to {scib_csv}")
+                    else:
+                        print('[WARN] run_scib_benchmark not found in scIB module; skipping.')
+                else:
+                    print('[WARN] Could not load scIB module spec; skipping scIB benchmarking.')
+            else:
+                print('[WARN] scIB module file not found; skipping scIB benchmarking.')
+        except Exception as e:  # pragma: no cover
+            print(f"[WARN] scIB benchmarking failed: {e}")
+    print(f"[INFO] Writing combined AnnData to {out_path}")
+    combined.write(out_path)
     print("[DONE] Inter-study combination complete.")
 
 if __name__ == '__main__':  # pragma: no cover

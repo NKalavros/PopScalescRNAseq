@@ -26,7 +26,10 @@ def main():
     # Batched embedding generation for lower RAM usage
     # Initialize a list to store embeddings from each batch
     all_embeddings = []
-
+    # If batch size is 0, just do all the dataset
+    if batch_size <= 0 or batch_size > adata.shape[0]:
+        batch_size = adata.shape[0]
+    print(f"Using batch size: {batch_size}")
     # Iterate over the data in batches
     for start in range(0, adata.shape[0], batch_size):
         end = min(start + batch_size, adata.shape[0])
