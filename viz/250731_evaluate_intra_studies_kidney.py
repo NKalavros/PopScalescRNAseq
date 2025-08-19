@@ -14,9 +14,9 @@ import subprocess
 import gc
 # Set base directory (relative to script location)
 BASE_DIR = '/gpfs/scratch/nk4167/KidneyAtlas'  # Change this to your base directory
-N_OBS = 20000  # Number of observations to subsample for speed
+N_OBS = 30000  # Number of observations to subsample for speed
 EMBEDDING_METHODS = ['scgpt', 'scimilarity', 'geneformer', 'scfoundation', 'uce','geneformer_helical','scgpt_helical','transcriptformer']  # Embedding methods to evaluate
-DIRECTORIES_TO_EVALUATE = ['lake_scrna','lake_snrna', 'Abedini', 'SCP1288', 'Krishna', 'Braun']  # Directories to evaluate
+DIRECTORIES_TO_EVALUATE = ['Krishna']  # Directories to evaluate
 RUN_SCIB = True  # Whether to run scib evaluation
 RUN_SUBSET = True  # Whether to subsample the data
 RUN_UMAP = True  # Whether to run UMAP
@@ -211,6 +211,7 @@ for study in all_files:
             base_adata = base_adata[common_idx, :]
             if len(common_idx) == 0:
                 print(f"No overlapping cells between base AnnData and {file_path}, skipping.")
+                print(f'This file failed to intersect: {file_path}')
                 del adata_tmp
                 continue
             # scfoundation and geneformer have specific representation keys (scfoundation_embeddings and X_geneformer)
@@ -220,7 +221,7 @@ for study in all_files:
                 rep_key = 'scfoundation_embeddings'
             # Specialized handling for transcriptformer
             elif method == 'transcriptformer':
-                rep_key = 'embeddings'
+                rep_key = 'embeddings' # This will go in the new branch, this logic is becoming stupid.
             else:
                 rep_key = f"x_{method.lower()}"
             if rep_key in adata_tmp.obsm:
@@ -230,22 +231,33 @@ for study in all_files:
                     # Introducing a minor name change here for extra consistency.
                     if rep_key != 'scfoundation_embeddings':
                         rep_key_new = rep_key
-                    elif rep_key == 'transcritformer':
+                    if rep_key == 'embeddings': # Handle transcriptformer
                         rep_key_new = 'x_transcriptformer'
-                    else:
+                    if rep_key == 'scfoundation_embeddings':
                         rep_key_new = 'x_scfoundation'
                     base_adata.obsm[rep_key_new] = arr
-                    print(f"Added {rep_key} to base AnnData.obsm for {len(common_idx)} cells.")
+                    print(f"Added {rep_key_new} to base AnnData.obsm for {len(common_idx)} cells.")
+                    print(f'Base Adata now has {base_adata.n_obs} cells and {base_adata.n_vars} genes.')
                 else:
                     print(f"Cell indices do not match exactly for {rep_key} in {file_path}. Skipping this embedding.")
             else:
                 print(f"Representation {rep_key} not found in obsm for {file_path}")
+                print('Adding the first key anyway')
+                rep_key = list(adata_tmp.obsm.keys())[0]  # Fallback to the first key
+                arr = adata_tmp[common_idx, :]
+                if list(common_idx) == list(base_adata.obs_names) and method != 'transcriptformer':  #Super stupid specialized hacky logic
+                    rep_key_new = rep_key
+                base_adata.obsm[rep_key_new] = arr.obsm[rep_key].copy()
+                print(f"Added {rep_key} to base AnnData.obsm for {len(common_idx)} cells.")
+                print(f'Base Adata now has {base_adata.n_obs} cells and {base_adata.n_vars} genes.')
+            # Clean up
             del adata_tmp
     print(f"Merged AnnData for {study} with representations: {list(base_adata.obsm.keys())}")
     print(f'Metadata columns in adata.obs: {base_adata.obs.columns.tolist()}')
+    print(f'Base Adata has {base_adata.n_obs} cells and {base_adata.n_vars} genes.')
     if LIBRARY_KEY not in base_adata.obs:
         print(f"Warning: {LIBRARY_KEY} not found in adata.obs, using potential searches.")
-        potential_keys = ['biosample_id', 'orig.ident', 'Sample', 'SampleID', 'library_id','orig_ident','sample']
+        potential_keys = ['biosample_id', 'orig.ident','Batch', 'Sample', 'SampleID', 'library_id','orig_ident','sample']
         for key in potential_keys:
             if key in base_adata.obs:
                 # Check if there are more than one unique values
@@ -304,7 +316,7 @@ for study in all_files:
         ("x_geneformer", "geneformer"),
         ("x_scfoundation", "scfoundation"),
         ("x_uce", "uce"),
-        ('x_geneformer_helical', 'geneformer_helical'),
+        ('X_geneformer_helical', 'geneformer_helical'),
         ('x_scgpt_helical', 'scgpt_helical'),
         ('x_transcriptformer', 'transcriptformer')
     ]

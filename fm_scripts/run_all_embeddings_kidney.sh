@@ -206,6 +206,7 @@ mkdir -p embeddings
 if [ ! -f "embeddings/transcriptformer.h5ad" ]; then
     bash /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/run_transcriptformer.sh
 fi
+
 cd /gpfs/scratch/nk4167/KidneyAtlas/Braun
 mkdir -p embeddings
 if [ ! -f "embeddings/transcriptformer.h5ad" ]; then

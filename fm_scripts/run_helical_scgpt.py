@@ -22,7 +22,7 @@ def main():
     adata.var_names_make_unique()
     dataset = scgpt.process_data(adata)
     embeddings = scgpt.get_embeddings(dataset)
-    adata.obsm['X_geneformer_scgpt'] = embeddings
+    adata.obsm['X_helical_scgpt'] = embeddings
 
     # Sanitize obs and var columns
     adata.obs.columns = adata.obs.columns.astype(str)

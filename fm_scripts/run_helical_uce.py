@@ -72,7 +72,7 @@ def main():
 
     adata.write(args.output_file)
 
-    print("Base model embeddings shape:", all_embeddings.shape)
+    print("Base model embeddings shape:", embeddings.shape)
 
 if __name__ == "__main__":
     main()
