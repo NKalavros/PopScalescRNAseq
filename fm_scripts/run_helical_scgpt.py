@@ -23,7 +23,8 @@ def main():
     dataset = scgpt.process_data(adata)
     embeddings = scgpt.get_embeddings(dataset)
     adata.obsm['X_helical_scgpt'] = embeddings
-
+    # PRint first obs names
+    print("First 5 obs names:", adata.obs_names[:5])
     # Sanitize obs and var columns
     adata.obs.columns = adata.obs.columns.astype(str)
     adata.var.columns = adata.var.columns.astype(str)
