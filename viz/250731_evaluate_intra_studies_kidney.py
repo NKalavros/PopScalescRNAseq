@@ -16,7 +16,7 @@ import gc
 BASE_DIR = '/gpfs/scratch/nk4167/KidneyAtlas'  # Change this to your base directory
 N_OBS = 30000  # Number of observations to subsample for speed
 EMBEDDING_METHODS = ['scgpt', 'scimilarity', 'geneformer', 'scfoundation', 'uce','geneformer_helical','scgpt_helical','transcriptformer']  # Embedding methods to evaluate
-DIRECTORIES_TO_EVALUATE = ['Krishna']  # Directories to evaluate
+DIRECTORIES_TO_EVALUATE = ['SCP1288']  # Directories to evaluate
 RUN_SCIB = True  # Whether to run scib evaluation
 RUN_SUBSET = True  # Whether to subsample the data
 RUN_UMAP = True  # Whether to run UMAP
@@ -209,6 +209,7 @@ for study in all_files:
             common_idx = base_adata.obs_names.intersection(adata_tmp.obs_names)
             # Reorder base adata to make sure we'll add the correct embeddings to the correct places
             base_adata = base_adata[common_idx, :]
+            print(f'Base AnnData has {base_adata.n_obs} cells and {base_adata.n_vars} genes.')
             if len(common_idx) == 0:
                 print(f"No overlapping cells between base AnnData and {file_path}, skipping.")
                 print(f'This file failed to intersect: {file_path}')
@@ -356,11 +357,12 @@ for study in all_files:
             available_obsms.append(obsm_key)
             print(f"Running UMAP for {method_name} integration for {study}")
             run_umap_and_plot(base_adata, obsm_key, method_name, study, BASE_DIR, color=['cell_type'])
-
+            gc.collect()
 
     # --- Single scIB evaluation for all embeddings ---
     if RUN_SCIB and available_obsms:
         try:
+            gc.collect()
             biocons = BioConservation(isolated_labels=False)
             bm = Benchmarker(
                 base_adata,
@@ -374,6 +376,7 @@ for study in all_files:
             )
             bm.prepare()
             bm.benchmark()
+            gc.collect()
             bm.plot_results_table(show=False, min_max_scale=False,save_dir=os.path.join(BASE_DIR, study, 'figures'))
             # Save the results to a CSV file
             results_df = bm.get_results()

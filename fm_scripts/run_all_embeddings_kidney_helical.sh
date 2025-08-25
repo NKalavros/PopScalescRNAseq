@@ -27,7 +27,7 @@ fi
 cd /gpfs/scratch/nk4167/KidneyAtlas/Krishna
 mkdir -p embeddings
 if [ ! -f "embeddings/scgpt_helical.h5ad" ]; then
-    python /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/run_helical_scgpt.py  --output_file embeddings/scgpt_helical.h5ad
+    python /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/run_helical_scgpt.py  --input data.h5ad --output_file embeddings/scgpt_helical.h5ad
 fi
 cd /gpfs/scratch/nk4167/KidneyAtlas/Braun
 mkdir -p embeddings

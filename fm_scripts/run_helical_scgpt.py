@@ -20,10 +20,13 @@ def main():
 
     adata = ad.read_h5ad(args.input_file)
     adata.var_names_make_unique()
+    # Ensure integers and counts
+    if adata.X.max() >= 1000:
+        adata.X = adata.X.astype(int)
     dataset = scgpt.process_data(adata)
     embeddings = scgpt.get_embeddings(dataset)
     adata.obsm['X_helical_scgpt'] = embeddings
-    # PRint first obs names
+    # Print first obs names
     print("First 5 obs names:", adata.obs_names[:5])
     # Sanitize obs and var columns
     adata.obs.columns = adata.obs.columns.astype(str)

@@ -1,13 +1,8 @@
-1. Run models through helical
-    - Perform comparisons between my code and Helical - Done for Geneformer
+David - PopScale - Tabulate all results until now - Done
 
-2. Evaluate inter study integration
-    - Compare foundation models
-    - Compare with scANVI, scPoli, Symphonypy, CellHint
+David - PopScale - Ensure our intra study comparisons are good - Still need one more run (Kidney: SCP1288, Breast: Klughammer_snRNA, Pal) - Done
 
-3. Complete embeddings for rest of the studies - Done
+David - PopScale - Run models on PanPDAC - Done
 
-4. Add scMamba, mamba-ssm based packages, and transcriptformer - I don't care that much.
 
-5. Run the models on PanPDAC - Ugh.
-
+David - PopScale - Begin the inter-study comparisons with scANVI, scPoli, Symphony
