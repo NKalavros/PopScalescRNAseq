@@ -329,7 +329,7 @@ def main():  # pragma: no cover - Streamlit runtime function
 	pivot_heat = pivot_heat.reindex(index=sorted(pivot_heat.index))
 	fig_heat = px.imshow(
 		pivot_heat,
-		color_continuous_scale="Viridis",
+		color_continuous_scale="viridis",
 		aspect="auto",
 		origin="lower",
 		labels=dict(color=metric_for_heatmap),
@@ -355,7 +355,7 @@ def main():  # pragma: no cover - Streamlit runtime function
 		y="Method",
 		orientation="h",
 		color="Value",
-		color_continuous_scale="Viridis",
+		color_continuous_scale="viridis",
 		range_color=(rank_df.Value.min(), rank_df.Value.max()),
 	)
 	fig_rank.update_layout(
@@ -428,11 +428,11 @@ def run_cli_export(root: str, out_dir: str, pattern: Optional[str] = None, atlas
 		# Heatmap: Methods (rows) x Studies (columns)
 		hm = metric_df.groupby(["Study", "Method"], as_index=False)["Value"].mean()
 		pivot_hm = hm.pivot(index="Method", columns="Study", values="Value")
-		fig_heat = px.imshow(pivot_hm, color_continuous_scale="Viridis", aspect="auto", origin="lower", labels=dict(color=metric))
+		fig_heat = px.imshow(pivot_hm, color_continuous_scale="viridis", aspect="auto", origin="lower", labels=dict(color=metric))
 		fig_heat.write_html(os.path.join(out_dir, f"heatmap_{metric}.html"), include_plotlyjs="cdn")
 		# Ranking bar chart
 		rank = metric_df.groupby("Method", as_index=False)["Value"].mean().sort_values("Value", ascending=False)
-		fig_rank = px.bar(rank, x="Value", y="Method", orientation="h", color="Value", color_continuous_scale="Viridis")
+		fig_rank = px.bar(rank, x="Value", y="Method", orientation="h", color="Value", color_continuous_scale="viridis")
 		fig_rank.update_layout(yaxis=dict(categoryorder="total ascending"))
 		fig_rank.write_html(os.path.join(out_dir, f"ranking_{metric}.html"), include_plotlyjs="cdn")
 	print(f"Exported per-metric heatmaps & rankings for {len(metrics)} metrics.")
