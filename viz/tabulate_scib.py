@@ -209,35 +209,53 @@ def load_all_results(files: List[str]) -> pd.DataFrame:
 
 
 def _style_dataframe(df: pd.DataFrame) -> "pd.io.formats.style.Styler":  # type: ignore
-	# Highlight maxima per column (metrics) if numeric
+	"""Return a Styler with manual gradient + max highlighting without matplotlib.
+
+	We avoid pandas' background_gradient (matplotlib dependency / colormap registry
+	issues on some HPC builds) by computing per-cell colors manually.
+	"""
 	numeric_cols = list(df.select_dtypes(include=[np.number]).columns)
-	if not numeric_cols:
-		return df.style
+	if not numeric_cols or os.environ.get("SCIB_DISABLE_GRADIENT"):
+		return df.style.format(precision=4)
 
-	def highlight_max(s):  # noqa: D401
-		try:
-			max_val = s.max()
-		except Exception:
-			return ["" for _ in s]
-		return ["background-color: #264653; color: #fff;" if (v == max_val) else "" for v in s]
+	# Define two endpoints for gradient (light -> dark)
+	start_rgb = (240, 249, 232)  # #f0f9e8
+	end_rgb = (8, 104, 172)      # #0868ac
 
-	# Choose a safe colormap
-	preferred = ["viridis", "plasma", "cividis", "inferno", "magma", "Greys"]
-	try:
-		import matplotlib
-		available = set(matplotlib.colormaps)  # matplotlib >= 3.7
-	except Exception:  # pragma: no cover
-		available = {"Greys"}
-	cmap = next((c for c in preferred if c in available), "Greys")
+	def interp_color(val: float, vmin: float, vmax: float) -> str:
+		if pd.isna(val):
+			return ""
+		if vmax <= vmin:
+			ratio = 0.5
+		else:
+			ratio = (val - vmin) / (vmax - vmin)
+		ratio = max(0.0, min(1.0, float(ratio)))
+		r = int(start_rgb[0] + (end_rgb[0] - start_rgb[0]) * ratio)
+		g = int(start_rgb[1] + (end_rgb[1] - start_rgb[1]) * ratio)
+		b = int(start_rgb[2] + (end_rgb[2] - start_rgb[2]) * ratio)
+		return f"background-color: rgb({r},{g},{b});"
+
+	# Precompute min/max per numeric column
+	col_minmax = {c: (df[c].min(skipna=True), df[c].max(skipna=True)) for c in numeric_cols}
+	col_max_vals = {c: df[c].max(skipna=True) for c in numeric_cols}
+
+	def style_column(col: pd.Series) -> List[str]:
+		col_key = str(col.name)
+		vmin, vmax = col_minmax[col_key]
+		max_val = col_max_vals[col_key]
+		styles: List[str] = []
+		for v in col:
+			base = interp_color(v, vmin, vmax)
+			if v == max_val and not pd.isna(v):
+				# Override for max highlight
+				styles.append("background-color: #264653; color: #fff;")
+			else:
+				styles.append(base)
+		return styles
 
 	styler = df.style.format(precision=4)
-	# Single background gradient across the full numeric subset to avoid repeated cmap lookups triggering errors
-	try:
-		styler = styler.background_gradient(cmap=cmap, subset=numeric_cols)
-	except Exception:
-		# Final fallback without gradient
-		pass
-	styler = styler.apply(highlight_max, subset=numeric_cols)
+	for c in numeric_cols:
+		styler = styler.apply(style_column, subset=[c])
 	return styler
 
 
@@ -324,7 +342,11 @@ def main():  # pragma: no cover - Streamlit runtime function
 	# Styled wide table (optional) if not too large
 	if agg_pivot.shape[1] <= 20:
 		st.markdown("**Styled Table (highlight best per metric)**")
-		st.dataframe(_style_dataframe(agg_pivot), use_container_width=True)
+		try:
+			st.dataframe(_style_dataframe(agg_pivot), use_container_width=True)
+		except Exception as e:
+			st.warning(f"Styling failed (showing plain table): {e}")
+			st.dataframe(agg_pivot, use_container_width=True)
 
 	# ---------------------------- Heatmap ---------------------------- #
 	st.subheader("Heatmap: Methods vs Studies")
