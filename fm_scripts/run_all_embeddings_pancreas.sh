@@ -86,8 +86,7 @@ done
 
 # scGPT through helical
 conda activate /gpfs/scratch/nk4167/miniconda/envs/helical-package
-
-cd /gpfs/scratch/nk4167/PancraesasAtlas/
+cd /gpfs/scratch/nk4167/PancreasAtlas/
 for dir in */ ; do
     echo "Processing directory: $dir"
     # Enter the directory

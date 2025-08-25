@@ -20,6 +20,10 @@ def main():
     geneformer_v2 = Geneformer(model_config)
 
     adata = ad.read_h5ad(args.input_file)
+    adata.var_names_make_unique()
+    # Add processing to integers if it is obviously counts
+    if adata.X.max() >= 1000:
+        adata.X = adata.X.astype(int)
     dataset = geneformer_v2.process_data(adata)
     embeddings = geneformer_v2.get_embeddings(dataset)
     adata.obsm['X_geneformer_helical'] = embeddings
