@@ -210,18 +210,33 @@ def load_all_results(files: List[str]) -> pd.DataFrame:
 
 def _style_dataframe(df: pd.DataFrame) -> "pd.io.formats.style.Styler":  # type: ignore
 	# Highlight maxima per column (metrics) if numeric
-	numeric_cols = df.select_dtypes(include=[np.number]).columns
+	numeric_cols = list(df.select_dtypes(include=[np.number]).columns)
+	if not numeric_cols:
+		return df.style
+
 	def highlight_max(s):  # noqa: D401
-		is_max = s == s.max()
-		return ["background-color: #264653; color: #fff;" if v else "" for v in is_max]
-	styler = df.style.format(precision=4)
-	for c in numeric_cols:
-		# Use lowercase 'viridis' (matplotlib colormap names are lowercase) and guard against errors
 		try:
-			styler = styler.background_gradient(cmap="viridis", subset=[c])
-		except ValueError:
-			# Fallback to 'Greys' if somehow unavailable
-			styler = styler.background_gradient(cmap="Greys", subset=[c])
+			max_val = s.max()
+		except Exception:
+			return ["" for _ in s]
+		return ["background-color: #264653; color: #fff;" if (v == max_val) else "" for v in s]
+
+	# Choose a safe colormap
+	preferred = ["viridis", "plasma", "cividis", "inferno", "magma", "Greys"]
+	try:
+		import matplotlib
+		available = set(matplotlib.colormaps)  # matplotlib >= 3.7
+	except Exception:  # pragma: no cover
+		available = {"Greys"}
+	cmap = next((c for c in preferred if c in available), "Greys")
+
+	styler = df.style.format(precision=4)
+	# Single background gradient across the full numeric subset to avoid repeated cmap lookups triggering errors
+	try:
+		styler = styler.background_gradient(cmap=cmap, subset=numeric_cols)
+	except Exception:
+		# Final fallback without gradient
+		pass
 	styler = styler.apply(highlight_max, subset=numeric_cols)
 	return styler
 
