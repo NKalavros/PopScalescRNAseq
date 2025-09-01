@@ -59,7 +59,7 @@ SYMPHONY_METRICS_CSV = 'symphony_interstudy_metrics_debug.csv' if DEBUG_MODE els
 RUN_SCPOLI = True  # Run scPoli inter-study integration & label transfer
 SCPOLI_MODULE_FILENAME = '250811_interstudy_scpoli.py'
 SCPOLI_METRICS_CSV = 'scpoli_interstudy_metrics_debug.csv' if DEBUG_MODE else 'scpoli_interstudy_metrics.csv'
-RUN_SCARCHES = True  # Run scArches (SCANVI surgery) inter-study integration
+RUN_SCARCHES =True  # Run scArches (SCANVI surgery) inter-study integration
 SCARCHES_MODULE_FILENAME = '250811_interstudy_scarches.py'
 SCARCHES_METRICS_CSV = 'scarches_interstudy_metrics_debug.csv' if DEBUG_MODE else 'scarches_interstudy_metrics.csv'
 RUN_SCIB = True  # Run scIB benchmarking across embeddings
@@ -73,6 +73,31 @@ SCIB_EMBEDDINGS: List[str] = [
 SCIB_BATCH_KEYS: List[str] = [STUDY_KEY, LIBRARY_KEY]
 
 # ------------------------------- Utilities -------------------------------------
+
+def clean_cell_type_labels(adata: ad.AnnData, cell_type_key: str = CELL_TYPE_KEY) -> None:
+    """Clean cell type labels by removing problematic suffixes like .1, .2, etc.
+    
+    This helps with label harmonization across studies that may have added unique
+    suffixes to prevent duplicate labels during processing.
+    """
+    if cell_type_key not in adata.obs:
+        print(f"[WARN] '{cell_type_key}' not found in adata.obs; skipping label cleaning.")
+        return
+    
+    import re
+    original_labels = adata.obs[cell_type_key].astype(str)
+    
+    # Remove suffixes like .1, .2, .10, etc. but preserve meaningful ones like CD4+, CD8+, etc.
+    cleaned_labels = original_labels.str.replace(r'\.(\d+)$', '', regex=True)
+    
+    # Count how many labels were changed
+    n_changed = (original_labels != cleaned_labels).sum()
+    if n_changed > 0:
+        print(f"[INFO] Cleaned {n_changed} cell type labels (removed numeric suffixes)")
+        adata.obs[cell_type_key] = cleaned_labels.astype('category')
+    else:
+        print(f"[INFO] No cell type labels needed cleaning")
+
 
 def find_final_file(study: str, base_dir: str = BASE_DIR, suffix: str = FINAL_SUFFIX) -> Optional[str]:
     """Return path to the expected final embeddings file if it exists."""
@@ -105,6 +130,10 @@ def load_studies(studies: List[str]) -> List[ad.AnnData]:
         
         # add study key
         a.obs[STUDY_KEY] = s
+        
+        # Clean cell type labels (remove .1, .2, etc. suffixes)
+        clean_cell_type_labels(a, CELL_TYPE_KEY)
+        
         # Ensure categorical types
         for key in [LIBRARY_KEY, CELL_TYPE_KEY, STUDY_KEY]:
             if key in a.obs:
