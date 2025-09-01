@@ -372,6 +372,7 @@ def main():
     if DEBUG_MODE:
         print(f"[DEBUG] Running in DEBUG mode - using max {DEBUG_N_CELLS} cells per study")
         print(f"[DEBUG] Output files will have debug suffix")
+        print(f"[DEBUG] Using smaller parameters for faster processing")
     else:
         print("[INFO] Running in FULL mode - using all cells")
     
@@ -380,6 +381,15 @@ def main():
         print("[ERROR] No studies loaded; exiting.")
         return
     combined = concatenate(adatas)
+    
+    # Clean cell type labels after concatenation to ensure consistency
+    print("[INFO] Final cell type label cleaning after concatenation...")
+    clean_cell_type_labels(combined, CELL_TYPE_KEY)
+    
+    # Debug: show unique cell types after cleaning
+    if DEBUG_MODE:
+        unique_types = combined.obs[CELL_TYPE_KEY].unique()
+        print(f"[DEBUG] Unique cell types after cleaning ({len(unique_types)}): {sorted(unique_types)}")
 
     mapping: Optional[Dict[str, str]] = None
     if RUN_LLM_STANDARDIZATION and CELL_TYPE_KEY in combined.obs:
@@ -412,6 +422,10 @@ def main():
                     spec.loader.exec_module(symphony_mod)  # type: ignore[attr-defined]
                     if hasattr(symphony_mod, 'run_symphony_interstudy'):
                         print('[INFO] Running Symphony inter-study mapping...')
+                        # Adapt parameters for debug mode (smaller datasets need fewer HVGs)
+                        n_top_genes = 1000 if DEBUG_MODE else 3000
+                        n_pcs = 20 if DEBUG_MODE else 30
+                        print(f"[INFO] Symphony params: n_top_genes={n_top_genes}, n_pcs={n_pcs}")
                         metrics_df, ref_study = symphony_mod.run_symphony_interstudy(
                             combined,
                             study_key=STUDY_KEY,
@@ -419,6 +433,8 @@ def main():
                             cell_type_key=CELL_TYPE_KEY,
                             add_embedding=True,
                             embedding_key='X_symphony',
+                            n_top_genes=n_top_genes,
+                            n_pcs=n_pcs,
                         )
                         metrics_csv_path = os.path.join(BASE_DIR, SYMPHONY_METRICS_CSV)
                         metrics_df.to_csv(metrics_csv_path, index=False)
@@ -444,12 +460,20 @@ def main():
                     spec.loader.exec_module(scpoli_mod)  # type: ignore[attr-defined]
                     if hasattr(scpoli_mod, 'run_scpoli_interstudy'):
                         print('[INFO] Running scPoli inter-study integration...')
+                        # Adapt parameters for debug mode (faster training)
+                        latent_dim = 20 if DEBUG_MODE else 30
+                        pretraining_epochs = 10 if DEBUG_MODE else 40
+                        total_epochs = 20 if DEBUG_MODE else 50
+                        print(f"[INFO] scPoli params: latent_dim={latent_dim}, epochs={total_epochs}")
                         scpoli_metrics_df, scpoli_ref = scpoli_mod.run_scpoli_interstudy(
                             combined,
                             study_key=STUDY_KEY,
                             batch_key=LIBRARY_KEY,
                             cell_type_key=CELL_TYPE_KEY,
                             embedding_key='X_scpoli',
+                            latent_dim=latent_dim,
+                            pretraining_epochs=pretraining_epochs,
+                            total_epochs=total_epochs,
                         )
                         scpoli_csv = os.path.join(BASE_DIR, SCPOLI_METRICS_CSV)
                         scpoli_metrics_df.to_csv(scpoli_csv, index=False)
@@ -475,6 +499,10 @@ def main():
                     spec.loader.exec_module(scarches_mod)  # type: ignore[attr-defined]
                     if hasattr(scarches_mod, 'run_scarches_interstudy'):
                         print('[INFO] Running scArches (SCANVI surgery) inter-study integration...')
+                        # Adapt parameters for debug mode
+                        n_epochs = 20 if DEBUG_MODE else 50
+                        n_latent = 20 if DEBUG_MODE else 30
+                        print(f"[INFO] scArches params: n_epochs={n_epochs}, n_latent={n_latent}")
                         scarches_metrics_df, scarches_ref = scarches_mod.run_scarches_interstudy(
                             combined,
                             base_dir=BASE_DIR,
@@ -482,6 +510,8 @@ def main():
                             batch_key=LIBRARY_KEY,
                             cell_type_key=CELL_TYPE_KEY,
                             embedding_key='X_scarches',
+                            n_epochs=n_epochs,
+                            n_latent=n_latent,
                         )
                         scarches_csv = os.path.join(BASE_DIR, SCARCHES_METRICS_CSV)
                         scarches_metrics_df.to_csv(scarches_csv, index=False)
