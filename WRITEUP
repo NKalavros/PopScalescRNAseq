@@ -1,0 +1,35 @@
+Brief, 5 page communication for something like NatMeth
+
+Issues with existing benchmarks
+
+    - The OpenProblems one: https://openproblems.bio/benchmarks/batch_integration?version=v2.0.0
+    - The CZI Benchmarks one: https://virtualcellmodels.cziscience.com/benchmarks (https://www.nature.com/articles/s41587-025-02694-w)
+    - Too much focus on perturbation prediction due to Virtual Cell hype, but we also care about batch_integration
+        1. https://bmcgenomics.biomedcentral.com/articles/10.1186/s12864-025-11600-2
+        2. https://www.biorxiv.org/content/10.1101/2024.10.02.616248v2
+        3. https://arxiv.org/abs/2410.13956
+        4. Benchmarking AI Models for In Silico Gene Perturbation of Cells
+        5. Closely following on this study: https://link.springer.com/article/10.1186/s13059-025-03574-x
+        6. Inspired by the Ahman-Eltze study: https://www.nature.com/articles/s41592-025-02772-6
+        7. Note the Virtual Cell Challenge
+        8. Tandem attempts, such as the classification study: A Systematic Evaluation of Single-Cell Foundation Models on Cell-Type Classification Task (https://dl.acm.org/doi/abs/10.1145/3701551.3708811)
+
+First, the dataset and its availability
+
+Usefulness for different types of cell types
+
+Evaluation code
+
+The Intra- and Inter-dataset evaluation
+
+Harmonizing all cell types with LLMs or with CellHint
+
+
+---
+Fig 1. Summary of what we are doing
+
+Big FunkyHeatmap of metrics from scib 
+
+Fig 2. The intra study evaluation
+
+Fig 3. The inter study evaluation

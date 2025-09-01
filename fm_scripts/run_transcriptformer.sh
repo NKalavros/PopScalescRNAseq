@@ -27,7 +27,7 @@ for item in result:
 # Add ensembl_id column to adata.var
 adata.var['ensembl_id'] = [ensembl_mapping.get(gene, None) for gene in adata.var_names]
 adata.var_names_make_unique()  # Ensure unique var_names
-adata.obs['assay'] = 'SCP1288'  # Add assay column
+adata.obs['index'] = adata.obs_names.astype(str)  # Ensure obs_names are strings
 adata.write_h5ad('data_with_ensembl.h5ad')"
 
 

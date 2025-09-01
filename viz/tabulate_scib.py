@@ -35,7 +35,7 @@ You can then download these files from HPC (e.g. scp / rsync) without running St
 
 Remote usage (HPC -> local) for the dashboard:
 
-	1. On HPC: export SCIB_ATLASES=BreastAtlas,KidneyAtlas && cd /gpfs/scratch/nk4167/PopScalescRNAseq && streamlit run tabulate_scib.py --server.address 0.0.0.0 --server.port 12345 -- --root /gpfs/scratch/nk4167/
+	1. On HPC: export SCIB_ATLASES=BreastAtlas,KidneyAtlas,PancreasAtlas && cd /gpfs/scratch/nk4167/PopScalescRNAseq && streamlit run viz/tabulate_scib.py --server.address 0.0.0.0 --server.port 12345 -- --root /gpfs/scratch/nk4167/
 	2. SSH tunnel locally:
 		 ssh -L 12345:localhost:12345 bigpurple
 		 a. ssh to your compute node if needed

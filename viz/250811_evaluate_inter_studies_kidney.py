@@ -60,7 +60,7 @@ SCIB_METRICS_CSV = 'scib_metrics_long.csv'
 SCIB_EMBEDDINGS: List[str] = [
     'X_symphony', 'X_scpoli', 'X_scarches',  # integration methods
     # Potential foundation model embeddings (add if present):
-    'X_geneformer', 'X_scgpt', 'X_uce', 'X_scfoundation', 'X_cellfm', 'X_transcriptformer'
+    'x_geneformer_helical', 'x_scgpt_helical', 'x_uce', 'x_scfoundation', 'x_transcriptformer'
 ]
 SCIB_BATCH_KEYS: List[str] = [STUDY_KEY, LIBRARY_KEY]
 

@@ -99,3 +99,38 @@ for dir in */ ; do
     fi
     cd ..
 done
+
+# Geneformer through helical (only one that works)
+conda activate /gpfs/scratch/nk4167/miniconda/envs/helical-package
+cd /gpfs/scratch/nk4167/PancreasAtlas/
+for dir in */ ; do
+    echo "Processing directory: $dir"
+    # Enter the directory
+    cd "$dir"
+    # Create embeddings directory if it doesn't exist
+    mkdir -p embeddings
+    # Check if the embeddings file already exists
+    if [ ! -f "embeddings/geneformer_helical.h5ad" ]; then
+        python /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/run_helical_geneformer.py --output_file embeddings/geneformer_helical.h5ad
+    fi
+    cd ..
+done
+
+
+# Run them in reverse too
+
+# Geneformer through helical (only one that works)
+conda activate /gpfs/scratch/nk4167/miniconda/envs/helical-package
+cd /gpfs/scratch/nk4167/PancreasAtlas/
+for dir in $(ls -d */ | sort -r) ; do
+    echo "Processing directory: $dir"
+    # Enter the directory
+    cd "$dir"
+    # Create embeddings directory if it doesn't exist
+    mkdir -p embeddings
+    # Check if the embeddings file already exists
+    if [ ! -f "embeddings/geneformer_helical.h5ad" ]; then
+        python /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/run_helical_geneformer.py --output_file embeddings/geneformer_helical.h5ad
+    fi
+    cd ..
+done

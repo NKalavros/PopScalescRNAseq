@@ -21,3 +21,8 @@ for study in study_groups:
     print(f'Saved {study} subset with {adata_subset.n_obs} cells to {subset_path}')
     # PRint the sameple counts from orig.ident
     print(adata_subset.obs['orig.ident'].value_counts())
+
+
+adata = sc.read_h5ad('/gpfs/data/tsirigoslab/home/camerd03/panPDAC/analysis-min1200umis-min500genes-max15mito/out-combined/seurat_obj_scANVI_5k.h5ad')
+# Save the metadata
+adata.obs.to_csv(os.path.join('/gpfs/scratch/nk4167/PancreasAtlas/metadata.csv'))
