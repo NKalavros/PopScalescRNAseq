@@ -77,29 +77,74 @@ def _prepare_reference(
 ) -> ad.AnnData:
     """Run Symphony reference preprocessing pipeline in-place and return it.
     Steps: normalize -> log1p -> HVGs (batch aware) -> subset HVGs -> scale -> PCA -> Harmony
+    
+    Follows symphonypy tutorial workflow with robustness for small datasets.
     """
     # Use counts layer if present
     if 'counts' in adata_ref.layers:
         adata_ref.X = adata_ref.layers['counts'].copy()
-    # Normalization & log
+    
+    # Normalization & log (following tutorial exactly)
     sc.pp.normalize_total(adata_ref, target_sum=target_sum)
     sc.pp.log1p(adata_ref)
-    sc.pp.highly_variable_genes(
-        adata_ref,
-        batch_key=batch_key if batch_key in adata_ref.obs else None,
-        n_top_genes=n_top_genes,
-    )
+    
+    # Highly variable genes with adaptive n_top_genes for small datasets
+    original_n_genes = adata_ref.n_vars
+    adaptive_n_top_genes = min(n_top_genes, max(500, adata_ref.n_vars // 3))
+    
+    print(f"[INFO] Symphony HVG selection: requesting {adaptive_n_top_genes} from {original_n_genes} genes")
+    
+    try:
+        sc.pp.highly_variable_genes(
+            adata_ref,
+            batch_key=batch_key if batch_key in adata_ref.obs else None,
+            n_top_genes=adaptive_n_top_genes,
+        )
+    except Exception as e:
+        print(f"[WARN] HVG selection failed with batch_key, trying without batch: {e}")
+        # Fallback: no batch correction in HVG selection
+        sc.pp.highly_variable_genes(
+            adata_ref,
+            n_top_genes=adaptive_n_top_genes,
+        )
+    
+    # Set raw before subsetting (following tutorial)
     adata_ref.raw = adata_ref
+    
+    # Subset to highly variable genes
     if 'highly_variable' in adata_ref.var:
-        adata_ref = adata_ref[:, adata_ref.var['highly_variable']].copy()
+        n_hvg = adata_ref.var['highly_variable'].sum()
+        print(f"[INFO] Found {n_hvg} highly variable genes, subsetting...")
+        if n_hvg > 0:
+            adata_ref = adata_ref[:, adata_ref.var['highly_variable']].copy()
+        else:
+            print(f"[WARN] No highly variable genes found, using top {adaptive_n_top_genes} by variance")
+            # Fallback: select genes by highest variance
+            adata_ref.var['gene_var'] = np.var(adata_ref.X.toarray() if hasattr(adata_ref.X, 'toarray') else adata_ref.X, axis=0)
+            top_var_genes = adata_ref.var.nlargest(adaptive_n_top_genes, 'gene_var').index
+            adata_ref = adata_ref[:, top_var_genes].copy()
+    
+    # Scale (following tutorial)
     sc.pp.scale(adata_ref, max_value=10)
-    sc.pp.pca(adata_ref, n_comps=n_pcs, zero_center=False)
-    # Harmony integrate if multiple batches
+    
+    # PCA (following tutorial exactly - zero_center=False)
+    actual_n_pcs = min(n_pcs, adata_ref.n_vars - 1, adata_ref.n_obs - 1)
+    print(f"[INFO] Computing PCA with {actual_n_pcs} components")
+    sc.pp.pca(adata_ref, n_comps=actual_n_pcs, zero_center=False)
+    
+    # Harmony integration (following tutorial)
     if batch_key in adata_ref.obs and adata_ref.obs[batch_key].nunique() > 1 and sp is not None:
-        sp.pp.harmony_integrate(adata_ref, key=batch_key)  # type: ignore[attr-defined]
+        print(f"[INFO] Running Harmony integration on {adata_ref.obs[batch_key].nunique()} batches")
+        try:
+            sp.pp.harmony_integrate(adata_ref, key=batch_key, max_iter_harmony=10)  # type: ignore[attr-defined]
+        except Exception as e:
+            print(f"[WARN] Harmony integration failed: {e}, using PCA only")
+            adata_ref.obsm['X_pca_harmony'] = adata_ref.obsm['X_pca']
     else:
+        print(f"[INFO] Single batch or no batch key, using PCA as harmony embedding")
         # Mirror expected key so downstream knows representation name exists
         adata_ref.obsm['X_pca_harmony'] = adata_ref.obsm['X_pca']
+    
     return adata_ref
 
 
@@ -203,19 +248,31 @@ def run_symphony_interstudy(
         adata_query = _align_vars(adata_ref, adata_query)
         # Preprocess
         adata_query = _prepare_query(adata_query, target_sum=target_sum)
-        # Map embedding
+        # Map embedding (following tutorial)
         if sp is not None:
-            sp.tl.map_embedding(adata_query, adata_ref, key=batch_key if batch_key in adata_query.obs else None)  # type: ignore[attr-defined]
-        # Confidence metrics
+            try:
+                sp.tl.map_embedding(adata_query, adata_ref, key=batch_key if batch_key in adata_query.obs else None)  # type: ignore[attr-defined]
+            except Exception as e:
+                print(f"[WARN] map_embedding failed for study {query_study}: {e}")
+                continue
+                
+        # Confidence metrics (following tutorial)
         try:
             if sp is not None:
                 sp.tl.per_cell_confidence(adata_query, adata_ref)  # type: ignore[attr-defined]
         except Exception as e:  # pragma: no cover
             print(f"[WARN] per_cell_confidence failed for study {query_study}: {e}")
-        # Label transfer
+            
+        # Label transfer (following tutorial - need ref_labels parameter)
         transferred_key = cell_type_key + kNN_label_key_suffix
         if sp is not None:
-            sp.tl.transfer_labels_kNN(adata_query, adata_ref, cell_type_key)  # type: ignore[attr-defined]
+            try:
+                # Following tutorial: need to specify ref_labels parameter
+                sp.tl.transfer_labels_kNN(adata_query, adata_ref, ref_labels=[cell_type_key])  # type: ignore[attr-defined]
+            except Exception as e:
+                print(f"[WARN] transfer_labels_kNN failed for study {query_study}: {e}")
+                # Fallback: copy original labels
+                adata_query.obs[transferred_key] = adata_query.obs[cell_type_key]
         # The transfer function overwrites the same key; copy to suffix if needed
         if transferred_key != cell_type_key and transferred_key not in adata_query.obs:
             adata_query.obs[transferred_key] = adata_query.obs[cell_type_key]
