@@ -11,6 +11,11 @@ Goals (initial version):
    (Not executed by default; requires OPENAI_API_KEY and network access.)
 5. Save the combined AnnData plus (optionally) a JSON mapping of harmonized labels.
 
+DEBUG MODE:
+- Set DEBUG_MODE=True to subsample each study to DEBUG_N_CELLS cells for faster testing
+- Debug mode automatically adds '_debug' suffix to all output files
+- Uses random seed 42 for reproducible subsampling
+
 Future (not yet implemented):
 - Run cross-study batch correction metrics (scIB) using both batch keys (study vs library) in separate benchmark runs.
 - Allow selecting subset of embeddings / dimensionality reductions for evaluation.
@@ -26,6 +31,7 @@ from typing import Dict, List, Optional, Tuple
 import scanpy as sc  # type: ignore
 import anndata as ad  # type: ignore
 import pandas as pd  # type: ignore
+import numpy as np  # type: ignore
 
 # ------------------------------- Configuration ---------------------------------
 BASE_DIR = '/gpfs/scratch/nk4167/KidneyAtlas'  # Adjust as needed
@@ -36,27 +42,29 @@ FINAL_SUFFIX = '_final_embeddings.h5ad'
 LIBRARY_KEY = 'library_id'
 CELL_TYPE_KEY = 'cell_type'
 STUDY_KEY = 'study'  # New key we add
+DEBUG_MODE = True  # Set True to use only subset of cells for faster testing
+DEBUG_N_CELLS = 1000  # Number of cells to subsample per study in debug mode
 RUN_LLM_STANDARDIZATION = True  # Set True to attempt LLM-based label harmonization
 LLM_MODEL = 'gpt-4o'  # Change if desired
 LLM_TEMPERATURE = 0.0
 LLM_MAX_RETRIES = 3
 LLM_SLEEP_BETWEEN_RETRIES = 5
 LLM_USE_STRUCTURED = True  # Attempt JSON schema structured output (newer SDKs)
-OUTPUT_COMBINED_FILENAME = 'interstudy_combined.h5ad'
-LABEL_MAPPING_JSON = 'interstudy_celltype_mapping.json'
+OUTPUT_COMBINED_FILENAME = 'interstudy_combined_debug.h5ad' if DEBUG_MODE else 'interstudy_combined.h5ad'
+LABEL_MAPPING_JSON = 'interstudy_celltype_mapping_debug.json' if DEBUG_MODE else 'interstudy_celltype_mapping.json'
 MAX_STANDARD_LABELS = 30  # Hard cap for standardized labels
 RUN_SYMPHONY = True  # Run Symphony inter-study mapping & label transfer evaluation
 SYMPHONY_MODULE_FILENAME = '250811_interstudy_symphony.py'  # File containing run_symphony_interstudy
-SYMPHONY_METRICS_CSV = 'symphony_interstudy_metrics.csv'
+SYMPHONY_METRICS_CSV = 'symphony_interstudy_metrics_debug.csv' if DEBUG_MODE else 'symphony_interstudy_metrics.csv'
 RUN_SCPOLI = True  # Run scPoli inter-study integration & label transfer
 SCPOLI_MODULE_FILENAME = '250811_interstudy_scpoli.py'
-SCPOLI_METRICS_CSV = 'scpoli_interstudy_metrics.csv'
+SCPOLI_METRICS_CSV = 'scpoli_interstudy_metrics_debug.csv' if DEBUG_MODE else 'scpoli_interstudy_metrics.csv'
 RUN_SCARCHES = True  # Run scArches (SCANVI surgery) inter-study integration
 SCARCHES_MODULE_FILENAME = '250811_interstudy_scarches.py'
-SCARCHES_METRICS_CSV = 'scarches_interstudy_metrics.csv'
+SCARCHES_METRICS_CSV = 'scarches_interstudy_metrics_debug.csv' if DEBUG_MODE else 'scarches_interstudy_metrics.csv'
 RUN_SCIB = True  # Run scIB benchmarking across embeddings
 SCIB_MODULE_FILENAME = '250811_interstudy_scib.py'
-SCIB_METRICS_CSV = 'scib_metrics_long.csv'
+SCIB_METRICS_CSV = 'scib_metrics_long_debug.csv' if DEBUG_MODE else 'scib_metrics_long.csv'
 SCIB_EMBEDDINGS: List[str] = [
     'X_symphony', 'X_scpoli', 'X_scarches',  # integration methods
     # Potential foundation model embeddings (add if present):
@@ -76,6 +84,7 @@ def load_studies(studies: List[str]) -> List[ad.AnnData]:
     """Load available studies' final embeddings AnnData objects, adding study key.
 
     Skips studies whose final file is missing. Warns if required metadata keys are missing.
+    If DEBUG_MODE is True, subsamples each study to DEBUG_N_CELLS cells.
     """
     adatas: List[ad.AnnData] = []
     for s in studies:
@@ -85,6 +94,15 @@ def load_studies(studies: List[str]) -> List[ad.AnnData]:
             continue
         print(f"[INFO] Loading {path}")
         a = sc.read_h5ad(path)
+        
+        # Debug mode: subsample cells
+        if DEBUG_MODE and a.n_obs > DEBUG_N_CELLS:
+            print(f"[DEBUG] Subsampling study '{s}' from {a.n_obs} to {DEBUG_N_CELLS} cells")
+            # Use scanpy's random subsampling to maintain diversity
+            sc.pp.subsample(a, n_obs=DEBUG_N_CELLS, random_state=42)
+        elif DEBUG_MODE:
+            print(f"[DEBUG] Study '{s}' has {a.n_obs} cells (≤ {DEBUG_N_CELLS}), keeping all")
+        
         # add study key
         a.obs[STUDY_KEY] = s
         # Ensure categorical types
@@ -319,6 +337,15 @@ def sanitize_obs(adata: ad.AnnData) -> None:
 # ------------------------------- Main Flow -------------------------------------
 
 def main():
+    # Set random seed for reproducibility
+    np.random.seed(42)
+    
+    if DEBUG_MODE:
+        print(f"[DEBUG] Running in DEBUG mode - using max {DEBUG_N_CELLS} cells per study")
+        print(f"[DEBUG] Output files will have debug suffix")
+    else:
+        print("[INFO] Running in FULL mode - using all cells")
+    
     adatas = load_studies(STUDIES)
     if not adatas:
         print("[ERROR] No studies loaded; exiting.")
