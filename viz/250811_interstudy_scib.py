@@ -84,20 +84,19 @@ def run_scib_benchmark(
         preset = 'fast'
 
     METRIC_FLAGS_BASE = dict(
-        ari=True,
-        nmi=True,
-        asw=True,  # silhouette label
-        silhouette=True,
-        graph_connectivity=True,
-        pcr=True,
-        ilisi=full,  # only in full
-        clisi=full,  # only in full
-        kBET=False if preset != 'all' else True,
-        isolated_labels_f1=True,
-        isolated_labels_asw=True,
-        hvg_overlap=False,
-        cell_cycle=False,
-        trajectory_conservation=False,
+        ari_=True,
+        nmi_=True,
+        silhouette_=True,  # silhouette label and batch ASW
+        graph_conn_=True,
+        pcr_=True,
+        ilisi_=full,  # only in full
+        clisi_=full,  # only in full
+        kBET_=False if preset != 'all' else True,
+        isolated_labels_f1_=True,
+        isolated_labels_asw_=True,
+        hvg_score_=False,
+        cell_cycle_=False,
+        trajectory_=False,
     )
 
     if label_key in adata.obs:
