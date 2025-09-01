@@ -31,17 +31,19 @@ import anndata as ad  # type: ignore
 try:
     import scib  # type: ignore
     from scib.metrics import metrics as scib_metrics  # type: ignore
+    import scanpy as sc  # type: ignore
 except Exception as e:  # pragma: no cover
     scib = None  # type: ignore
     scib_metrics = None  # type: ignore
+    sc = None  # type: ignore
     _SCIB_IMPORT_ERROR = e
 else:
     _SCIB_IMPORT_ERROR = None
 
 
 def _check_requirements():
-    if scib is None or scib_metrics is None:
-        raise ImportError(f"scIB not available: {_SCIB_IMPORT_ERROR}")
+    if scib is None or scib_metrics is None or sc is None:
+        raise ImportError(f"scIB or scanpy not available: {_SCIB_IMPORT_ERROR}")
 
 
 def run_scib_benchmark(
@@ -121,6 +123,21 @@ def run_scib_benchmark(
             except Exception:
                 emb = np.asarray(emb)
         adata_int = ad.AnnData(X=emb.copy(), obs=adata.obs.copy())
+        
+        # Compute PCA and kNN graph on the embedding for scIB metrics that require them
+        # Some metrics require X_pca to be available
+        # For embeddings, we compute PCA on the embedding itself
+        try:
+            sc.tl.pca(adata_int, n_comps=min(50, emb.shape[1] - 1, emb.shape[0] - 1))
+            # Also compute neighbors as some metrics may need it
+            sc.pp.neighbors(adata_int, use_rep='X_pca')
+        except Exception:
+            # If preprocessing fails, try without PCA (will limit available metrics)
+            try:
+                sc.pp.neighbors(adata_int, use_rep='X')
+            except Exception:
+                pass  # Some metrics may still work without neighbors
+            
         for bkey in batch_keys:
             if bkey not in adata.obs:
                 continue
