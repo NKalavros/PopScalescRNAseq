@@ -199,8 +199,7 @@ def run_scarches_interstudy(
     assert sca is not None, "scArches not available"
     scanvae = sca.models.SCANVI(
         source_adata,
-        n_latent=latent_dim,
-        unlabeled_category=unlabeled_category
+        n_latent=latent_dim
     )
     
     print("[INFO][scArches] Training SCANVI reference model...")
