@@ -44,6 +44,21 @@ except Exception as e:  # pragma: no cover
     f1_score = None  # type: ignore
     accuracy_score = None  # type: ignore
 
+def _align_genes_between_studies(adata: ad.AnnData, study_key: str) -> ad.AnnData:
+    """Align genes across studies to common intersection for scPoli compatibility."""
+    print("[DEBUG][scPoli] Starting gene alignment across studies...")
+    studies = adata.obs[study_key].unique()
+    common_genes = None
+    for st in studies:
+        sub = adata[adata.obs[study_key] == st]
+        genes = set(sub.var_names)
+        common_genes = genes if common_genes is None else common_genes.intersection(genes)
+    if not common_genes:
+        raise ValueError("No common genes found across studies for scPoli")
+    common_list = sorted(common_genes)
+    print(f"[DEBUG][scPoli] Using {len(common_list)} common genes for alignment")
+    return adata[:, common_list].copy()
+
 
 def _check_requirements():
     if scPoli is None:
@@ -83,6 +98,9 @@ def run_scpoli_interstudy(
     if scPoli is None:
         raise ImportError(f"scPoli not available: {_SCPOLI_IMPORT_ERROR}")
     _check_requirements()
+    # Align genes across all studies to avoid dimension mismatches
+    print("[INFO][scPoli] Aligning genes across studies before reference building...")
+    adata = _align_genes_between_studies(adata, study_key)
     if study_key not in adata.obs:
         raise KeyError(f"Study key '{study_key}' not found in adata.obs")
     if cell_type_key not in adata.obs:
@@ -251,7 +269,10 @@ def run_scpoli_interstudy(
             
         query_adata = _subset_by_study(adata, study_key, study_name)
         
-        # Use the pre-computed common genes - this ensures all studies have same dimensions
+        # Align query genes to common gene set - ensure no missing genes
+        missing_genes = set(common_genes) - set(query_adata.var_names)
+        if missing_genes:
+            raise ValueError(f"[ERROR][scPoli] Query study '{study_name}' missing genes: {missing_genes}")
         query_adata = query_adata[:, common_genes].copy()
         
         # Ensure data is float32 to avoid dtype mismatches
