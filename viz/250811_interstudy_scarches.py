@@ -172,11 +172,28 @@ def run_scarches_interstudy(
     print("[INFO][scArches] Aligning genes across studies...")
     adata_aligned = _align_genes_between_studies(adata, study_key)
     
+    # CRITICAL: Convert sparse matrices to dense to prevent index corruption issues
+    # scArches/scvi-tools can suffer from the same sparse matrix corruption as scPoli
+    if hasattr(adata_aligned.X, 'toarray'):
+        print(f"[DEBUG][scArches] Converting sparse matrix to dense to avoid indexing errors")
+        adata_aligned.X = adata_aligned.X.toarray().astype(np.float32)
+    else:
+        print(f"[DEBUG][scArches] Working with dense matrix - ensuring contiguous memory layout")
+        adata_aligned.X = np.ascontiguousarray(adata_aligned.X)
+    
     # Choose reference (largest study)
     counts = adata_aligned.obs[study_key].value_counts()
     reference_study = counts.idxmax()
     print(f"[INFO][scArches] Using '{reference_study}' as SCANVI reference (n={counts.max()} cells)")
     ref_adata = _subset_by_study(adata_aligned, study_key, reference_study)
+    
+    # CRITICAL: Ensure reference data is dense and contiguous
+    if hasattr(ref_adata.X, 'toarray'):
+        print(f"[DEBUG][scArches] Converting reference sparse matrix to dense to avoid indexing errors")
+        ref_adata.X = ref_adata.X.toarray().astype(np.float32)
+    else:
+        print(f"[DEBUG][scArches] Reference working with dense matrix - ensuring contiguous memory layout")
+        ref_adata.X = np.ascontiguousarray(ref_adata.X)
 
     # Ensure unlabeled category exists
     if ref_adata.obs[cell_type_key].dtype.name == 'category':
@@ -224,10 +241,18 @@ def run_scarches_interstudy(
 
     # KNN trainer on reference latent
     try:
-        import anndata as _ad  # Import here for optional functionality
-        ref_emb_adata = _ad.AnnData(ref_latent)
+        ref_emb_adata = ad.AnnData(ref_latent)
         ref_emb_adata.obs = ref_adata.obs[[cell_type_key]].copy()
         ref_emb_adata.X = ref_latent
+        
+        # CRITICAL: Ensure reference latent embedding is dense and contiguous for KNN operations
+        if hasattr(ref_emb_adata.X, 'toarray'):
+            print(f"[DEBUG][scArches] Converting reference latent sparse matrix to dense for KNN")
+            ref_emb_adata.X = ref_emb_adata.X.toarray().astype(np.float32)
+        else:
+            print(f"[DEBUG][scArches] Reference latent working with dense matrix - ensuring contiguous memory layout")
+            ref_emb_adata.X = np.ascontiguousarray(ref_emb_adata.X.astype(np.float32))
+        
         knn_trainer = sca.utils.knn.weighted_knn_trainer(  # type: ignore[attr-defined]
             train_adata=ref_emb_adata,
             train_adata_emb='X',
@@ -242,12 +267,29 @@ def run_scarches_interstudy(
             continue
         query_adata = _subset_by_study(adata_aligned, study_key, study_name)
         print(f"[DEBUG][scArches] Processing query study '{study_name}' with shape {query_adata.shape}")
+        
+        # CRITICAL: Ensure query data is dense and contiguous to prevent index corruption
+        if hasattr(query_adata.X, 'toarray'):
+            print(f"[DEBUG][scArches] Converting query sparse matrix to dense to avoid indexing errors")
+            query_adata.X = query_adata.X.toarray().astype(np.float32)
+        else:
+            print(f"[DEBUG][scArches] Query working with dense matrix - ensuring contiguous memory layout")
+            query_adata.X = np.ascontiguousarray(query_adata.X)
+        
         try:
             q_prep = sca.models.SCANVI.prepare_query_anndata(adata=query_adata, reference_model=tmp_dir, inplace=False)  # type: ignore[attr-defined]
         except Exception as e:
             print(f"[ERROR][scArches] prepare_query_anndata failed for study {study_name}: {e}")
             print(f"[ERROR][scArches] This indicates gene alignment issues between reference and query")
             raise RuntimeError(f"scArches prepare_query_anndata failed for study {study_name}: {e}")
+        
+        # CRITICAL: Ensure prepared query data is also dense and contiguous
+        if hasattr(q_prep.X, 'toarray'):
+            print(f"[DEBUG][scArches] Converting prepared query sparse matrix to dense to avoid indexing errors")
+            q_prep.X = q_prep.X.toarray().astype(np.float32)
+        else:
+            print(f"[DEBUG][scArches] Prepared query working with dense matrix - ensuring contiguous memory layout")
+            q_prep.X = np.ascontiguousarray(q_prep.X)
         if cell_type_key in q_prep.obs:
             q_prep.obs[cell_type_key] = unlabeled_category
         try:
@@ -260,9 +302,16 @@ def run_scarches_interstudy(
             raise RuntimeError(f"scArches surgery failed for study {study_name}: {e}")
         try:
             if knn_trainer is not None:
-                import anndata as _ad  # Import here for optional functionality
-                q_emb_adata = _ad.AnnData(q_latent)
+                q_emb_adata = ad.AnnData(q_latent)
                 q_emb_adata.X = q_latent
+                
+                # CRITICAL: Ensure latent embeddings are dense and contiguous for KNN operations
+                if hasattr(q_emb_adata.X, 'toarray'):
+                    print(f"[DEBUG][scArches] Converting query latent sparse matrix to dense for KNN")
+                    q_emb_adata.X = q_emb_adata.X.toarray().astype(np.float32)
+                else:
+                    print(f"[DEBUG][scArches] Query latent working with dense matrix - ensuring contiguous memory layout")
+                    q_emb_adata.X = np.ascontiguousarray(q_emb_adata.X.astype(np.float32))
                 
                 # Debug information about shapes before KNN transfer
                 print(f"[DEBUG][scArches] Reference embedding shape: {ref_emb_adata.shape}")
