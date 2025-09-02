@@ -59,6 +59,59 @@ def _check_requirements():
         raise ImportError("scikit-learn metrics not available for accuracy/F1 computation.")
 
 
+def _align_genes_between_studies(adata: ad.AnnData, study_key: str) -> ad.AnnData:
+    """Align genes across studies to common intersection for scArches compatibility.
+    
+    scArches requires all studies (reference and queries) to have identical gene sets.
+    This function finds the intersection of genes across all studies and subsets 
+    each study to this common gene set.
+    
+    Returns a copy of adata with aligned genes.
+    """
+    print("[DEBUG][scArches] Starting gene alignment across studies...")
+    
+    # Get all unique studies
+    studies = adata.obs[study_key].unique()
+    print(f"[DEBUG][scArches] Studies to align: {list(studies)}")
+    
+    # Find intersection of genes across all studies
+    common_genes = None
+    study_gene_counts = {}
+    
+    for study in studies:
+        study_mask = adata.obs[study_key] == study
+        study_adata = adata[study_mask]
+        study_genes = set(study_adata.var_names)
+        study_gene_counts[study] = len(study_genes)
+        
+        if common_genes is None:
+            common_genes = study_genes
+        else:
+            common_genes = common_genes.intersection(study_genes)
+    
+    print(f"[DEBUG][scArches] Gene counts per study: {study_gene_counts}")
+    
+    if common_genes is None or len(common_genes) == 0:
+        raise ValueError("No common genes found across studies")
+    
+    print(f"[DEBUG][scArches] Common genes across all studies: {len(common_genes)}")
+    
+    # Convert to sorted list for consistent ordering
+    common_genes_list = sorted(list(common_genes))
+    print(f"[DEBUG][scArches] Using {len(common_genes_list)} common genes for scArches")
+    
+    # Subset to common genes
+    aligned_adata = adata[:, common_genes_list].copy()
+    
+    # Verify gene alignment
+    for study in studies:
+        study_mask = aligned_adata.obs[study_key] == study
+        study_subset = aligned_adata[study_mask]
+        print(f"[DEBUG][scArches] Study '{study}' after alignment: {study_subset.shape}")
+    
+    return aligned_adata
+
+
 def _subset_by_study(adata: ad.AnnData, study_key: str, study_name: str) -> ad.AnnData:
     return adata[adata.obs[study_key] == study_name].copy()
 
@@ -115,11 +168,15 @@ def run_scarches_interstudy(
     if cell_type_key not in adata.obs:
         raise KeyError(f"Cell type key '{cell_type_key}' not found in adata.obs")
 
+    # Align genes across studies to prevent dimension mismatch errors
+    print("[INFO][scArches] Aligning genes across studies...")
+    adata_aligned = _align_genes_between_studies(adata, study_key)
+    
     # Choose reference (largest study)
-    counts = adata.obs[study_key].value_counts()
+    counts = adata_aligned.obs[study_key].value_counts()
     reference_study = counts.idxmax()
     print(f"[INFO][scArches] Using '{reference_study}' as SCANVI reference (n={counts.max()} cells)")
-    ref_adata = _subset_by_study(adata, study_key, reference_study)
+    ref_adata = _subset_by_study(adata_aligned, study_key, reference_study)
 
     # Ensure unlabeled category exists
     if ref_adata.obs[cell_type_key].dtype.name == 'category':
@@ -128,13 +185,16 @@ def run_scarches_interstudy(
     else:
         ref_adata.obs[cell_type_key] = ref_adata.obs[cell_type_key].astype('category')
 
+    print(f"[DEBUG][scArches] Reference study '{reference_study}' aligned shape: {ref_adata.shape}")
+    print(f"[DEBUG][scArches] Unique cell types in reference: {len(ref_adata.obs[cell_type_key].unique())}")
+
     setup_kwargs = dict(labels_key=cell_type_key, unlabeled_category=unlabeled_category)
     if batch_key and batch_key in ref_adata.obs:
         setup_kwargs['batch_key'] = batch_key
-    sca.models.SCANVI.setup_anndata(ref_adata, **setup_kwargs)
+    sca.models.SCANVI.setup_anndata(ref_adata, **setup_kwargs)  # type: ignore[attr-defined]
 
     print('[INFO][scArches] Initializing SCANVI reference model...')
-    ref_model = sca.models.SCANVI(ref_adata, n_latent=latent_dim)
+    ref_model = sca.models.SCANVI(ref_adata, n_latent=latent_dim)  # type: ignore[attr-defined]
 
     early_stop_ref = dict(
         early_stopping_monitor='elbo_train',
@@ -164,11 +224,11 @@ def run_scarches_interstudy(
 
     # KNN trainer on reference latent
     try:
-        import anndata as _ad
+        import anndata as _ad  # Import here for optional functionality
         ref_emb_adata = _ad.AnnData(ref_latent)
         ref_emb_adata.obs = ref_adata.obs[[cell_type_key]].copy()
         ref_emb_adata.X = ref_latent
-        knn_trainer = sca.utils.knn.weighted_knn_trainer(
+        knn_trainer = sca.utils.knn.weighted_knn_trainer(  # type: ignore[attr-defined]
             train_adata=ref_emb_adata,
             train_adata_emb='X',
             n_neighbors=n_neighbors_transfer,
@@ -180,16 +240,17 @@ def run_scarches_interstudy(
     for study_name in counts.index:
         if study_name == reference_study:
             continue
-        query_adata = _subset_by_study(adata, study_key, study_name)
+        query_adata = _subset_by_study(adata_aligned, study_key, study_name)
+        print(f"[DEBUG][scArches] Processing query study '{study_name}' with shape {query_adata.shape}")
         try:
-            q_prep = sca.models.SCANVI.prepare_query_anndata(adata=query_adata, reference_model=tmp_dir, inplace=False)
+            q_prep = sca.models.SCANVI.prepare_query_anndata(adata=query_adata, reference_model=tmp_dir, inplace=False)  # type: ignore[attr-defined]
         except Exception as e:
             print(f"[WARN][scArches] prepare_query_anndata failed for study {study_name}: {e}; skipping.")
             continue
         if cell_type_key in q_prep.obs:
             q_prep.obs[cell_type_key] = unlabeled_category
         try:
-            q_model = sca.models.SCANVI.load_query_data(q_prep, tmp_dir, freeze_dropout=True)
+            q_model = sca.models.SCANVI.load_query_data(q_prep, tmp_dir, freeze_dropout=True)  # type: ignore[attr-defined]
             q_model.train(max_epochs=query_max_epochs, **early_stop_ref)
             q_latent = q_model.get_latent_representation(q_prep)
         except Exception as e:
@@ -197,10 +258,10 @@ def run_scarches_interstudy(
             continue
         try:
             if knn_trainer is not None:
-                import anndata as _ad
+                import anndata as _ad  # Import here for optional functionality
                 q_emb_adata = _ad.AnnData(q_latent)
                 q_emb_adata.X = q_latent
-                labels_df, uncert_df = sca.utils.knn.weighted_knn_transfer(
+                labels_df, uncert_df = sca.utils.knn.weighted_knn_transfer(  # type: ignore[attr-defined]
                     query_adata=q_emb_adata,
                     query_adata_emb='X',
                     label_keys=cell_type_key,
