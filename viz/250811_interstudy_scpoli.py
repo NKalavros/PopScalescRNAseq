@@ -178,23 +178,14 @@ def run_scpoli_interstudy(
     print(f"[DEBUG][scPoli] Total unique cell types in dataset: {len(all_cell_types_in_data)}")
     print(f"[DEBUG][scPoli] Cell types: {sorted(all_cell_types_in_data)}")
     
-    if 0 < reference_fraction < 1.0:
-        ref_indices = np.random.default_rng(seed).choice(ref_adata.obs_names, size=int(len(ref_adata)*reference_fraction), replace=False)
-        ref_adata = ref_adata[ref_indices].copy()
-        print(f"[INFO][scPoli] Subsampled reference to {ref_adata.n_obs} cells (fraction={reference_fraction})")
-
-    # Clean and preprocess reference data following scPoli vignette
-    # Filter genes with minimal expression BEFORE finding common genes
-    sc.pp.filter_genes(ref_adata, min_cells=3)
-    
-    # Get all studies to find common genes across ALL datasets
+    # Find common genes across ALL datasets BEFORE any filtering to ensure consistency
+    print("[INFO][scPoli] Finding common genes across all studies before any filtering...")
     all_studies = list(counts.index)
     all_gene_sets = []
     
-    # Collect genes from each study after basic filtering
+    # Collect genes from each study without any filtering first
     for study in all_studies:
         study_adata = _subset_by_study(adata, study_key, study)
-        sc.pp.filter_genes(study_adata, min_cells=1)  # Minimal filtering for each study
         all_gene_sets.append(set(study_adata.var_names))
     
     # Find intersection of all gene sets - genes present in ALL studies
@@ -202,12 +193,25 @@ def run_scpoli_interstudy(
     common_genes = sorted(list(common_genes))  # Sort for consistent ordering
     
     if len(common_genes) == 0:
-        raise ValueError("[ERROR][scPoli] No genes common to all studies after filtering")
+        raise ValueError("[ERROR][scPoli] No genes common to all studies")
     
     print(f"[INFO][scPoli] Found {len(common_genes)} genes common to all studies")
     
-    # Subset reference to common genes
+    # Now subset reference to common genes BEFORE any filtering
     ref_adata = ref_adata[:, common_genes].copy()
+    
+    # Apply filtering only AFTER gene alignment to maintain consistency
+    print("[INFO][scPoli] Applying gene filtering to reference after alignment...")
+    sc.pp.filter_genes(ref_adata, min_cells=3)
+    
+    # Get the final filtered gene set from reference
+    final_genes = sorted(list(ref_adata.var_names))
+    print(f"[INFO][scPoli] After filtering, reference has {len(final_genes)} genes")
+    
+    if 0 < reference_fraction < 1.0:
+        ref_indices = np.random.default_rng(seed).choice(ref_adata.obs_names, size=int(len(ref_adata)*reference_fraction), replace=False)
+        ref_adata = ref_adata[ref_indices].copy()
+        print(f"[INFO][scPoli] Subsampled reference to {ref_adata.n_obs} cells (fraction={reference_fraction})")
     
     # Ensure reference data is float32 to avoid dtype mismatches
     if hasattr(ref_adata.X, 'dtype') and ref_adata.X.dtype != np.float32:
@@ -220,6 +224,10 @@ def run_scpoli_interstudy(
     condition_keys = [study_key]
     if batch_key and batch_key in ref_adata.obs:
         condition_keys.append(batch_key)
+
+    print(f"[DEBUG][scPoli] Reference dimensions before model init: {ref_adata.shape}")
+    print(f"[DEBUG][scPoli] Reference gene set length: {len(final_genes)}")
+    print(f"[DEBUG][scPoli] Reference condition keys: {condition_keys}")
 
     print("[INFO][scPoli] Initializing reference scPoli model...")
     model = scPoli(
@@ -269,11 +277,17 @@ def run_scpoli_interstudy(
             
         query_adata = _subset_by_study(adata, study_key, study_name)
         
-        # Align query genes to common gene set - ensure no missing genes
-        missing_genes = set(common_genes) - set(query_adata.var_names)
+        # Use the exact same final gene set as the reference (after filtering)
+        # This ensures perfect alignment between reference and query
+        missing_genes = set(final_genes) - set(query_adata.var_names)
         if missing_genes:
-            raise ValueError(f"[ERROR][scPoli] Query study '{study_name}' missing genes: {missing_genes}")
-        query_adata = query_adata[:, common_genes].copy()
+            raise ValueError(f"[ERROR][scPoli] Query study '{study_name}' missing genes after filtering: {missing_genes}")
+        
+        query_adata = query_adata[:, final_genes].copy()
+        
+        print(f"[INFO][scPoli] Query '{study_name}' aligned to {len(final_genes)} genes (same as reference)")
+        print(f"[DEBUG][scPoli] Query dimensions: {query_adata.shape}")
+        print(f"[DEBUG][scPoli] Query gene names match reference: {list(query_adata.var_names) == list(ref_adata.var_names)}")
         
         # Ensure data is float32 to avoid dtype mismatches
         if hasattr(query_adata.X, 'dtype') and query_adata.X.dtype != np.float32:
@@ -281,6 +295,13 @@ def run_scpoli_interstudy(
         
         # Clean query cell type labels
         query_adata.obs[cell_type_key] = query_adata.obs[cell_type_key].astype(str)
+        
+        # Verify gene order consistency
+        if not np.array_equal(query_adata.var_names, ref_adata.var_names):
+            print(f"[ERROR][scPoli] Gene order mismatch between reference and query '{study_name}'")
+            print(f"Reference genes[:5]: {list(ref_adata.var_names[:5])}")
+            print(f"Query genes[:5]: {list(query_adata.var_names[:5])}")
+            raise ValueError(f"Gene order mismatch for query '{study_name}'")
         
         print(f"[INFO][scPoli] Loading query data for study '{study_name}' (n={query_adata.n_obs}, genes={query_adata.n_vars})")
         
