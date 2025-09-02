@@ -504,82 +504,74 @@ def main():
         except Exception as e:  # pragma: no cover
             print(f"[WARN] Symphony inter-study evaluation failed: {e}")
 
-    # Optional: scPoli inter-study evaluation
+    # Optional: scPoli inter-study evaluation (errors will propagate)
     if RUN_SCPOLI:
-        try:
-            import importlib.util
-            scpoli_path = os.path.join(os.path.dirname(__file__), SCPOLI_MODULE_FILENAME)
-            if os.path.isfile(scpoli_path):
-                spec = importlib.util.spec_from_file_location('interstudy_scpoli_mod', scpoli_path)
-                if spec and spec.loader:
-                    scpoli_mod = importlib.util.module_from_spec(spec)
-                    spec.loader.exec_module(scpoli_mod)  # type: ignore[attr-defined]
-                    if hasattr(scpoli_mod, 'run_scpoli_interstudy'):
-                        print('[INFO] Running scPoli inter-study integration...')
-                        # Adapt parameters for debug mode (faster training)
-                        latent_dim = 20 if DEBUG_MODE else 30
-                        pretraining_epochs = 10 if DEBUG_MODE else 40
-                        total_epochs = 20 if DEBUG_MODE else 50
-                        print(f"[INFO] scPoli params: latent_dim={latent_dim}, epochs={total_epochs}")
-                        scpoli_metrics_df, scpoli_ref = scpoli_mod.run_scpoli_interstudy(
-                            combined,
-                            study_key=STUDY_KEY,
-                            batch_key=LIBRARY_KEY,
-                            cell_type_key=CELL_TYPE_KEY,
-                            embedding_key='X_scpoli',
-                            latent_dim=latent_dim,
-                            pretraining_epochs=pretraining_epochs,
-                            total_epochs=total_epochs,
-                        )
-                        scpoli_csv = os.path.join(BASE_DIR, SCPOLI_METRICS_CSV)
-                        scpoli_metrics_df.to_csv(scpoli_csv, index=False)
-                        print(f"[INFO] scPoli metrics saved to {scpoli_csv} (reference={scpoli_ref})")
-                    else:
-                        print('[WARN] run_scpoli_interstudy not found in scPoli module; skipping.')
+        import importlib.util
+        scpoli_path = os.path.join(os.path.dirname(__file__), SCPOLI_MODULE_FILENAME)
+        if os.path.isfile(scpoli_path):
+            spec = importlib.util.spec_from_file_location('interstudy_scpoli_mod', scpoli_path)
+            if spec and spec.loader:
+                scpoli_mod = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(scpoli_mod)  # type: ignore[attr-defined]
+                if hasattr(scpoli_mod, 'run_scpoli_interstudy'):
+                    print('[INFO] Running scPoli inter-study integration...')
+                    latent_dim = 20 if DEBUG_MODE else 30
+                    pretraining_epochs = 10 if DEBUG_MODE else 40
+                    total_epochs = 20 if DEBUG_MODE else 50
+                    print(f"[INFO] scPoli params: latent_dim={latent_dim}, epochs={total_epochs}")
+                    scpoli_metrics_df, scpoli_ref = scpoli_mod.run_scpoli_interstudy(
+                        combined,
+                        study_key=STUDY_KEY,
+                        batch_key=LIBRARY_KEY,
+                        cell_type_key=CELL_TYPE_KEY,
+                        embedding_key='X_scpoli',
+                        latent_dim=latent_dim,
+                        pretraining_epochs=pretraining_epochs,
+                        total_epochs=total_epochs,
+                    )
+                    scpoli_csv = os.path.join(BASE_DIR, SCPOLI_METRICS_CSV)
+                    scpoli_metrics_df.to_csv(scpoli_csv, index=False)
+                    print(f"[INFO] scPoli metrics saved to {scpoli_csv} (reference={scpoli_ref})")
                 else:
-                    print('[WARN] Could not load scPoli module spec; skipping.')
+                    raise AttributeError('run_scpoli_interstudy not found in scPoli module')
             else:
-                print('[WARN] scPoli module file not found; skipping inter-study scPoli integration.')
-        except Exception as e:  # pragma: no cover
-            print(f"[WARN] scPoli inter-study integration failed: {e}")
+                raise ImportError('Could not load scPoli module spec')
+        else:
+            raise FileNotFoundError(f'scPoli module file not found: {scpoli_path}')
 
-    # Optional: scArches (SCANVI surgery) inter-study evaluation
+    # Optional: scArches (SCANVI surgery) inter-study evaluation (errors will propagate)
     if RUN_SCARCHES:
-        try:
-            import importlib.util
-            scarches_path = os.path.join(os.path.dirname(__file__), SCARCHES_MODULE_FILENAME)
-            if os.path.isfile(scarches_path):
-                spec = importlib.util.spec_from_file_location('interstudy_scarches_mod', scarches_path)
-                if spec and spec.loader:
-                    scarches_mod = importlib.util.module_from_spec(spec)
-                    spec.loader.exec_module(scarches_mod)  # type: ignore[attr-defined]
-                    if hasattr(scarches_mod, 'run_scarches_interstudy'):
-                        print('[INFO] Running scArches (SCANVI surgery) inter-study integration...')
-                        # Adapt parameters for debug mode
-                        n_epochs = 20 if DEBUG_MODE else 50
-                        n_latent = 20 if DEBUG_MODE else 30
-                        print(f"[INFO] scArches params: n_epochs={n_epochs}, n_latent={n_latent}")
-                        scarches_metrics_df, scarches_ref = scarches_mod.run_scarches_interstudy(
-                            combined,
-                            base_dir=BASE_DIR,
-                            study_key=STUDY_KEY,
-                            batch_key=LIBRARY_KEY,
-                            cell_type_key=CELL_TYPE_KEY,
-                            embedding_key='X_scarches',
-                            reference_max_epochs=n_epochs,
-                            latent_dim=n_latent,
-                        )
-                        scarches_csv = os.path.join(BASE_DIR, SCARCHES_METRICS_CSV)
-                        scarches_metrics_df.to_csv(scarches_csv, index=False)
-                        print(f"[INFO] scArches metrics saved to {scarches_csv} (reference={scarches_ref})")
-                    else:
-                        print('[WARN] run_scarches_interstudy not found in scArches module; skipping.')
+        import importlib.util
+        scarches_path = os.path.join(os.path.dirname(__file__), SCARCHES_MODULE_FILENAME)
+        if os.path.isfile(scarches_path):
+            spec = importlib.util.spec_from_file_location('interstudy_scarches_mod', scarches_path)
+            if spec and spec.loader:
+                scarches_mod = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(scarches_mod)  # type: ignore[attr-defined]
+                if hasattr(scarches_mod, 'run_scarches_interstudy'):
+                    print('[INFO] Running scArches (SCANVI surgery) inter-study integration...')
+                    n_epochs = 20 if DEBUG_MODE else 50
+                    n_latent = 20 if DEBUG_MODE else 30
+                    print(f"[INFO] scArches params: n_epochs={n_epochs}, n_latent={n_latent}")
+                    scarches_metrics_df, scarches_ref = scarches_mod.run_scarches_interstudy(
+                        combined,
+                        base_dir=BASE_DIR,
+                        study_key=STUDY_KEY,
+                        batch_key=LIBRARY_KEY,
+                        cell_type_key=CELL_TYPE_KEY,
+                        embedding_key='X_scarches',
+                        reference_max_epochs=n_epochs,
+                        latent_dim=n_latent,
+                    )
+                    scarches_csv = os.path.join(BASE_DIR, SCARCHES_METRICS_CSV)
+                    scarches_metrics_df.to_csv(scarches_csv, index=False)
+                    print(f"[INFO] scArches metrics saved to {scarches_csv} (reference={scarches_ref})")
                 else:
-                    print('[WARN] Could not load scArches module spec; skipping.')
+                    raise AttributeError('run_scarches_interstudy not found in scArches module')
             else:
-                print('[WARN] scArches module file not found; skipping inter-study scArches integration.')
-        except Exception as e:  # pragma: no cover
-            print(f"[WARN] scArches inter-study integration failed: {e}")
+                raise ImportError('Could not load scArches module spec')
+        else:
+            raise FileNotFoundError(f'scArches module file not found: {scarches_path}')
 
     if mapping:
         mapping_path = os.path.join(BASE_DIR, LABEL_MAPPING_JSON)
