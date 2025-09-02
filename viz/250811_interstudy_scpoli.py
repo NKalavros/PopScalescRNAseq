@@ -89,11 +89,77 @@ def run_scpoli_interstudy(
         raise KeyError(f"Cell type key '{cell_type_key}' not found in adata.obs")
 
     counts = adata.obs[study_key].value_counts()
-    reference_study = counts.idxmax()
-    print(f"[INFO][scPoli] Using '{reference_study}' as reference (n={counts.max()} cells)")
-
-    # Store reference study data  
-    ref_adata = _subset_by_study(adata, study_key, reference_study)
+    
+    # Check cell type coverage across studies
+    print("[INFO][scPoli] Analyzing cell type coverage across studies...")
+    all_cell_types = set(adata.obs[cell_type_key].unique())
+    study_cell_types = {}
+    
+    for study in counts.index:
+        study_adata = _subset_by_study(adata, study_key, study)
+        study_cell_types[study] = set(study_adata.obs[cell_type_key].unique())
+    
+    # Find the study with the most comprehensive cell type coverage
+    coverage_scores = {}
+    for study in counts.index:
+        coverage = len(study_cell_types[study])
+        cell_count = counts[study]
+        # Score combines cell type diversity and total cell count
+        coverage_scores[study] = (coverage, cell_count)
+    
+    # Sort by cell type coverage first, then by cell count
+    best_study = max(coverage_scores.keys(), key=lambda x: coverage_scores[x])
+    reference_study = best_study
+    
+    ref_cell_types = study_cell_types[reference_study]
+    missing_types = all_cell_types - ref_cell_types
+    
+    if missing_types:
+        print(f"[INFO][scPoli] Reference study '{reference_study}' missing {len(missing_types)} cell types: {missing_types}")
+        print("[INFO][scPoli] Will augment reference with samples from other studies to ensure full coverage")
+        
+        # Create augmented reference by adding cells from other studies for missing types
+        ref_adata = _subset_by_study(adata, study_key, reference_study)
+        
+        # Add representative cells for missing cell types from other studies
+        augment_cells = []
+        for missing_type in missing_types:
+            # Find studies that have this cell type
+            donor_studies = [s for s in counts.index if missing_type in study_cell_types[s] and s != reference_study]
+            if donor_studies:
+                # Take from the study with most cells of this type
+                best_donor = max(donor_studies, key=lambda x: counts[x])
+                donor_adata = _subset_by_study(adata, study_key, best_donor)
+                type_cells = donor_adata[donor_adata.obs[cell_type_key] == missing_type]
+                
+                # Take a reasonable sample (up to 50 cells per missing type)
+                n_sample = min(50, len(type_cells))
+                if n_sample > 0:
+                    sampled = type_cells[:n_sample].copy()
+                    augment_cells.append(sampled)
+                    print(f"[INFO][scPoli] Adding {n_sample} '{missing_type}' cells from study '{best_donor}'")
+        
+        # Combine reference with augmented cells
+        if augment_cells:
+            augmented_ref = ad.concat([ref_adata] + augment_cells, join='outer')
+            ref_adata = augmented_ref
+            print(f"[INFO][scPoli] Augmented reference from {counts[reference_study]} to {ref_adata.n_obs} cells with full cell type coverage")
+    else:
+        ref_adata = _subset_by_study(adata, study_key, reference_study)
+        print(f"[INFO][scPoli] Reference study '{reference_study}' has complete cell type coverage")
+    
+    # Debug: show final reference cell types
+    ref_cell_types_final = set(ref_adata.obs[cell_type_key].unique())
+    print(f"[DEBUG][scPoli] Reference cell types after augmentation: {len(ref_cell_types_final)}")
+    print(f"[DEBUG][scPoli] Reference types: {sorted(ref_cell_types_final)}")
+    
+    print(f"[INFO][scPoli] Using '{reference_study}' as reference base (n={counts[reference_study]} cells)")
+    
+    # Debug: show cell types being used by scPoli
+    all_cell_types_in_data = set(adata.obs[cell_type_key].unique())
+    print(f"[DEBUG][scPoli] Total unique cell types in dataset: {len(all_cell_types_in_data)}")
+    print(f"[DEBUG][scPoli] Cell types: {sorted(all_cell_types_in_data)}")
+    
     if 0 < reference_fraction < 1.0:
         ref_indices = np.random.default_rng(seed).choice(ref_adata.obs_names, size=int(len(ref_adata)*reference_fraction), replace=False)
         ref_adata = ref_adata[ref_indices].copy()
@@ -124,6 +190,10 @@ def run_scpoli_interstudy(
     
     # Subset reference to common genes
     ref_adata = ref_adata[:, common_genes].copy()
+    
+    # Ensure reference data is float32 to avoid dtype mismatches
+    if hasattr(ref_adata.X, 'dtype') and ref_adata.X.dtype != np.float32:
+        ref_adata.X = ref_adata.X.astype(np.float32)
     
     # Clean cell type labels to remove any problematic characters/formats
     ref_adata.obs[cell_type_key] = ref_adata.obs[cell_type_key].astype(str)
@@ -183,6 +253,10 @@ def run_scpoli_interstudy(
         
         # Use the pre-computed common genes - this ensures all studies have same dimensions
         query_adata = query_adata[:, common_genes].copy()
+        
+        # Ensure data is float32 to avoid dtype mismatches
+        if hasattr(query_adata.X, 'dtype') and query_adata.X.dtype != np.float32:
+            query_adata.X = query_adata.X.astype(np.float32)
         
         # Clean query cell type labels
         query_adata.obs[cell_type_key] = query_adata.obs[cell_type_key].astype(str)

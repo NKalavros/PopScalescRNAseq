@@ -510,7 +510,7 @@ def main():
                             batch_key=LIBRARY_KEY,
                             cell_type_key=CELL_TYPE_KEY,
                             embedding_key='X_scarches',
-                            n_epochs=n_epochs,
+                            reference_max_epochs=n_epochs,
                             n_latent=n_latent,
                         )
                         scarches_csv = os.path.join(BASE_DIR, SCARCHES_METRICS_CSV)
