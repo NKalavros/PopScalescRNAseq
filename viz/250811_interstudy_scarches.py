@@ -186,7 +186,7 @@ def run_scarches_interstudy(
     print(f"[DEBUG][scArches] Unique cell types in reference: {len(source_adata.obs[cell_type_key].unique())}")
 
     # Setup reference model following official pipeline
-    setup_kwargs = dict(labels_key=cell_type_key)
+    setup_kwargs = dict(labels_key=cell_type_key, unlabeled_category=unlabeled_category)
     if batch_key and batch_key in source_adata.obs:
         setup_kwargs['batch_key'] = batch_key
     
