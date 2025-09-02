@@ -94,7 +94,7 @@ def run_scib_benchmark(
         ilisi_=full,  # only in full
         clisi_=full,  # only in full
         kBET_=False,  # Always disable kBET (very slow)
-        isolated_labels_f1_=True,  # Disable isolated labels (very slow clustering optimization)
+        isolated_labels_f1_=False,  # Disable isolated labels (very slow clustering optimization)
         isolated_labels_asw_=False,  # Disable isolated labels (very slow clustering optimization)
         hvg_score_=False,
         cell_cycle_=False,
