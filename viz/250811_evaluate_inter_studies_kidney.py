@@ -507,38 +507,72 @@ def main():
 
     # Optional: scPoli inter-study evaluation (errors will propagate)
     if RUN_SCPOLI:
-        import importlib.util
-        scpoli_path = os.path.join(os.path.dirname(__file__), SCPOLI_MODULE_FILENAME)
-        if os.path.isfile(scpoli_path):
-            spec = importlib.util.spec_from_file_location('interstudy_scpoli_mod', scpoli_path)
-            if spec and spec.loader:
-                scpoli_mod = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(scpoli_mod)  # type: ignore[attr-defined]
-                if hasattr(scpoli_mod, 'run_scpoli_interstudy'):
-                    print('[INFO] Running scPoli inter-study integration...')
-                    latent_dim = 20 if DEBUG_MODE else 30
-                    pretraining_epochs = 10 if DEBUG_MODE else 40
-                    total_epochs = 20 if DEBUG_MODE else 50
-                    print(f"[INFO] scPoli params: latent_dim={latent_dim}, epochs={total_epochs}")
-                    scpoli_metrics_df, scpoli_ref = scpoli_mod.run_scpoli_interstudy(
-                        combined,
-                        study_key=STUDY_KEY,
-                        batch_key=LIBRARY_KEY,
-                        cell_type_key=CELL_TYPE_KEY,
-                        embedding_key='X_scpoli',
-                        latent_dim=latent_dim,
-                        pretraining_epochs=pretraining_epochs,
-                        total_epochs=total_epochs,
-                    )
-                    scpoli_csv = os.path.join(BASE_DIR, SCPOLI_METRICS_CSV)
-                    scpoli_metrics_df.to_csv(scpoli_csv, index=False)
-                    print(f"[INFO] scPoli metrics saved to {scpoli_csv} (reference={scpoli_ref})")
+        try:
+            import importlib.util
+            scpoli_path = os.path.join(os.path.dirname(__file__), SCPOLI_MODULE_FILENAME)
+            if os.path.isfile(scpoli_path):
+                spec = importlib.util.spec_from_file_location('interstudy_scpoli_mod', scpoli_path)
+                if spec and spec.loader:
+                    scpoli_mod = importlib.util.module_from_spec(spec)
+                    spec.loader.exec_module(scpoli_mod)  # type: ignore[attr-defined]
+                    if hasattr(scpoli_mod, 'run_scpoli_interstudy'):
+                        print('[INFO] Running scPoli inter-study integration...')
+                        latent_dim = 20 if DEBUG_MODE else 30
+                        pretraining_epochs = 10 if DEBUG_MODE else 40
+                        total_epochs = 20 if DEBUG_MODE else 50
+                        print(f"[INFO] scPoli params: latent_dim={latent_dim}, epochs={total_epochs}")
+                        
+                        # Check obsm keys before scPoli
+                        obsm_before = set(combined.obsm.keys())
+                        print(f"[DEBUG] obsm keys before scPoli: {sorted(obsm_before)}")
+                        
+                        scpoli_metrics_df, scpoli_ref = scpoli_mod.run_scpoli_interstudy(
+                            combined,
+                            study_key=STUDY_KEY,
+                            batch_key=LIBRARY_KEY,
+                            cell_type_key=CELL_TYPE_KEY,
+                            embedding_key='X_scpoli',
+                            latent_dim=latent_dim,
+                            pretraining_epochs=pretraining_epochs,
+                            total_epochs=total_epochs,
+                        )
+                        
+                        # Check obsm keys after scPoli
+                        obsm_after = set(combined.obsm.keys())
+                        new_keys = obsm_after - obsm_before
+                        print(f"[DEBUG] obsm keys after scPoli: {sorted(obsm_after)}")
+                        if new_keys:
+                            print(f"[DEBUG] New obsm keys added by scPoli: {sorted(new_keys)}")
+                        else:
+                            print("[WARN] No new obsm keys added by scPoli!")
+                        
+                        scpoli_csv = os.path.join(BASE_DIR, SCPOLI_METRICS_CSV)
+                        scpoli_metrics_df.to_csv(scpoli_csv, index=False)
+                        print(f"[INFO] scPoli metrics saved to {scpoli_csv} (reference={scpoli_ref})")
+                        
+                        # Debug: Check if scPoli embedding was actually added
+                        if 'X_scpoli' in combined.obsm:
+                            print(f"[DEBUG] scPoli embedding successfully added to obsm with shape {combined.obsm['X_scpoli'].shape}")
+                        else:
+                            print("[ERROR] scPoli embedding 'X_scpoli' not found in obsm after execution!")
+                            print(f"[DEBUG] Available obsm keys after scPoli: {list(combined.obsm.keys())}")
+                            # Check for any scpoli-related keys
+                            scpoli_keys = [k for k in combined.obsm.keys() if 'scpoli' in k.lower()]
+                            if scpoli_keys:
+                                print(f"[DEBUG] Found alternative scPoli keys: {scpoli_keys}")
+                            else:
+                                print("[DEBUG] No scPoli-related keys found")
+                    else:
+                        raise AttributeError('run_scpoli_interstudy not found in scPoli module')
                 else:
-                    raise AttributeError('run_scpoli_interstudy not found in scPoli module')
+                    raise ImportError('Could not load scPoli module spec')
             else:
-                raise ImportError('Could not load scPoli module spec')
-        else:
-            raise FileNotFoundError(f'scPoli module file not found: {scpoli_path}')
+                raise FileNotFoundError(f'scPoli module file not found: {scpoli_path}')
+        except Exception as e:
+            print(f"[ERROR] scPoli inter-study evaluation failed: {e}")
+            import traceback
+            traceback.print_exc()
+            print("[WARN] Continuing without scPoli embedding")
 
     # Optional: scArches (SCANVI surgery) inter-study evaluation (errors will propagate)
     if RUN_SCARCHES:
@@ -567,6 +601,13 @@ def main():
                     scarches_csv = os.path.join(BASE_DIR, SCARCHES_METRICS_CSV)
                     scarches_metrics_df.to_csv(scarches_csv, index=False)
                     print(f"[INFO] scArches metrics saved to {scarches_csv} (reference={scarches_ref})")
+                    
+                    # Debug: Check if scArches embedding was actually added
+                    if 'X_scarches' in combined.obsm:
+                        print(f"[DEBUG] scArches embedding successfully added to obsm with shape {combined.obsm['X_scarches'].shape}")
+                    else:
+                        print("[ERROR] scArches embedding 'X_scarches' not found in obsm after execution!")
+                        print(f"[DEBUG] Available obsm keys after scArches: {list(combined.obsm.keys())}")
                 else:
                     raise AttributeError('run_scarches_interstudy not found in scArches module')
             else:
@@ -587,6 +628,25 @@ def main():
             from scib_metrics.benchmark import Benchmarker, BioConservation, BatchCorrection  # type: ignore[import]
             
             print('[INFO] Running scIB Benchmarker evaluation...')
+            
+            # Debug: Comprehensive check of integration method results
+            print("[DEBUG] Checking integration method results before scIB evaluation:")
+            expected_embeddings = {
+                'X_symphony': RUN_SYMPHONY,
+                'X_scpoli': RUN_SCPOLI, 
+                'X_scarches': RUN_SCARCHES
+            }
+            
+            for embedding_key, was_enabled in expected_embeddings.items():
+                if was_enabled:
+                    if embedding_key in combined.obsm:
+                        print(f"[DEBUG] ✓ {embedding_key}: Present (shape: {combined.obsm[embedding_key].shape})")
+                    else:
+                        print(f"[DEBUG] ✗ {embedding_key}: MISSING despite being enabled!")
+                else:
+                    print(f"[DEBUG] - {embedding_key}: Disabled (RUN flag was False)")
+            
+            print(f"[DEBUG] All obsm keys: {sorted(combined.obsm.keys())}")
             
             # Collect available embeddings from integration methods
             available_embeddings = []
@@ -610,7 +670,39 @@ def main():
                 if obsm_key in combined.obsm:
                     available_obsms.append(obsm_key)
                     print(f"[INFO] Found embedding: {obsm_key} ({method_name})")
+                else:
+                    print(f"[DEBUG] Missing embedding: {obsm_key} ({method_name})")
+            
             print('Here are all available obsm keys:', list(combined.obsm.keys()))
+            
+            # Special debugging for scPoli
+            if 'X_scpoli' not in available_obsms:
+                print("[WARN] X_scpoli embedding not found!")
+                print("[DEBUG] Checking if scPoli ran successfully...")
+                if RUN_SCPOLI:
+                    print("[DEBUG] RUN_SCPOLI is True - scPoli should have run")
+                    # Check if there are any scpoli-related keys
+                    scpoli_keys = [k for k in combined.obsm.keys() if 'scpoli' in k.lower()]
+                    if scpoli_keys:
+                        print(f"[DEBUG] Found scPoli-related keys: {scpoli_keys}")
+                        # Add the first scpoli key we find and update integration_methods
+                        for scpoli_key in scpoli_keys:
+                            if scpoli_key not in available_obsms:
+                                available_obsms.append(scpoli_key)
+                                print(f"[INFO] Added {scpoli_key} as scPoli embedding")
+                                # Also add to integration_methods for proper tracking
+                                integration_methods.append((scpoli_key, f'scpoli_{scpoli_key}'))
+                    else:
+                        print("[DEBUG] No scPoli-related keys found in obsm")
+                        print("[DEBUG] This suggests scPoli integration failed or didn't store results")
+                else:
+                    print("[DEBUG] RUN_SCPOLI is False - scPoli was skipped")
+            
+            # Also check for any other integration method embeddings that might be missing
+            for embed_key, method_name in [('X_symphony', 'symphony'), ('X_scarches', 'scarches')]:
+                if embed_key not in available_obsms and embed_key in combined.obsm:
+                    print(f"[DEBUG] Found {embed_key} in obsm but missed in initial detection")
+                    available_obsms.append(embed_key)
             if not available_obsms:
                 print('[WARN] No embeddings found for scIB evaluation; skipping.')
             else:
