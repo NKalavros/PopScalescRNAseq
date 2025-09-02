@@ -253,6 +253,33 @@ def run_scarches_interstudy(
             print(f"[DEBUG][scArches] Reference latent working with dense matrix - ensuring contiguous memory layout")
             ref_emb_adata.X = np.ascontiguousarray(ref_emb_adata.X.astype(np.float32))
         
+        # ULTRA-CRITICAL: Fix numerical stability issues that cause KNN index corruption
+        print(f"[DEBUG][scArches] Fixing numerical stability issues in reference latent embedding")
+        
+        # 1. Check for and fix any NaN/inf values
+        if np.any(~np.isfinite(ref_emb_adata.X)):
+            print(f"[WARN][scArches] Found NaN/inf values in reference latent, replacing with zeros")
+            ref_emb_adata.X = np.nan_to_num(ref_emb_adata.X, nan=0.0, posinf=0.0, neginf=0.0)
+        
+        # 2. Add small noise to prevent zero standard deviations (the root cause of divide-by-zero)
+        print(f"[DEBUG][scArches] Adding minimal noise to prevent zero standard deviations")
+        noise_scale = 1e-8  # Extremely small noise that won't affect results but prevents zero std
+        ref_emb_adata.X += np.random.RandomState(seed).normal(0, noise_scale, ref_emb_adata.X.shape).astype(np.float32)
+        
+        # 3. Ensure no zero standard deviation columns
+        stds = np.std(ref_emb_adata.X, axis=0)
+        zero_std_cols = stds < 1e-10
+        if np.any(zero_std_cols):
+            print(f"[WARN][scArches] Found {np.sum(zero_std_cols)} columns with near-zero std, adding noise")
+            ref_emb_adata.X[:, zero_std_cols] += np.random.RandomState(seed+1).normal(0, 1e-6, (ref_emb_adata.X.shape[0], np.sum(zero_std_cols))).astype(np.float32)
+        
+        # 4. Normalize to reasonable range to prevent numerical overflow
+        print(f"[DEBUG][scArches] Normalizing reference embedding to prevent numerical overflow")
+        ref_emb_adata.X = ref_emb_adata.X / (np.max(np.abs(ref_emb_adata.X)) + 1e-8)
+        
+        print(f"[DEBUG][scArches] Reference embedding shape: {ref_emb_adata.X.shape}, dtype: {ref_emb_adata.X.dtype}")
+        print(f"[DEBUG][scArches] Reference embedding stats: min={np.min(ref_emb_adata.X):.6f}, max={np.max(ref_emb_adata.X):.6f}, std={np.std(ref_emb_adata.X):.6f}")
+        
         knn_trainer = sca.utils.knn.weighted_knn_trainer(  # type: ignore[attr-defined]
             train_adata=ref_emb_adata,
             train_adata_emb='X',
@@ -312,6 +339,33 @@ def run_scarches_interstudy(
                 else:
                     print(f"[DEBUG][scArches] Query latent working with dense matrix - ensuring contiguous memory layout")
                     q_emb_adata.X = np.ascontiguousarray(q_emb_adata.X.astype(np.float32))
+                
+                # ULTRA-CRITICAL: Fix numerical stability issues that cause KNN index corruption
+                print(f"[DEBUG][scArches] Fixing numerical stability issues in query latent embedding")
+                
+                # 1. Check for and fix any NaN/inf values
+                if np.any(~np.isfinite(q_emb_adata.X)):
+                    print(f"[WARN][scArches] Found NaN/inf values in query latent, replacing with zeros")
+                    q_emb_adata.X = np.nan_to_num(q_emb_adata.X, nan=0.0, posinf=0.0, neginf=0.0)
+                
+                # 2. Add small noise to prevent zero standard deviations (the root cause of divide-by-zero)
+                print(f"[DEBUG][scArches] Adding minimal noise to prevent zero standard deviations")
+                noise_scale = 1e-8  # Extremely small noise that won't affect results but prevents zero std
+                q_emb_adata.X += np.random.RandomState(seed+study_name.__hash__()).normal(0, noise_scale, q_emb_adata.X.shape).astype(np.float32)
+                
+                # 3. Ensure no zero standard deviation columns
+                stds = np.std(q_emb_adata.X, axis=0)
+                zero_std_cols = stds < 1e-10
+                if np.any(zero_std_cols):
+                    print(f"[WARN][scArches] Found {np.sum(zero_std_cols)} columns with near-zero std, adding noise")
+                    q_emb_adata.X[:, zero_std_cols] += np.random.RandomState(seed+study_name.__hash__()+1).normal(0, 1e-6, (q_emb_adata.X.shape[0], np.sum(zero_std_cols))).astype(np.float32)
+                
+                # 4. Normalize to reasonable range to prevent numerical overflow (using same scale as reference)
+                print(f"[DEBUG][scArches] Normalizing query embedding to prevent numerical overflow")
+                q_emb_adata.X = q_emb_adata.X / (np.max(np.abs(q_emb_adata.X)) + 1e-8)
+                
+                print(f"[DEBUG][scArches] Query embedding shape: {q_emb_adata.X.shape}, dtype: {q_emb_adata.X.dtype}")
+                print(f"[DEBUG][scArches] Query embedding stats: min={np.min(q_emb_adata.X):.6f}, max={np.max(q_emb_adata.X):.6f}, std={np.std(q_emb_adata.X):.6f}")
                 
                 # Debug information about shapes before KNN transfer
                 print(f"[DEBUG][scArches] Reference embedding shape: {ref_emb_adata.shape}")
