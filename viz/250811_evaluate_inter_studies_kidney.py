@@ -266,7 +266,7 @@ def _build_mapping_schema() -> dict:
 def generate_cell_type_mapping(raw_labels: List[str], model: str = LLM_MODEL) -> Dict[str, str]:
     """Call LLM to produce mapping original_label -> standardized_label.
 
-    Returns mapping. Raises on failure.
+    Returns mapping. Uses best available mapping even if it exceeds MAX_STANDARD_LABELS.
     """
     unique_labels = sorted(set(l for l in raw_labels if l and l.lower() != 'nan'))
     user_prompt = (
@@ -279,6 +279,9 @@ def generate_cell_type_mapping(raw_labels: List[str], model: str = LLM_MODEL) ->
 
     last_err: Optional[Exception] = None
     adaptive_messages = list(messages)
+    best_mapping: Optional[Dict[str, str]] = None
+    best_unique_count = float('inf')
+    
     for attempt in range(1, LLM_MAX_RETRIES + 1):
         try:
             response_format = _build_mapping_schema() if LLM_USE_STRUCTURED else None
@@ -302,16 +305,26 @@ def generate_cell_type_mapping(raw_labels: List[str], model: str = LLM_MODEL) ->
             for lbl in unique_labels:
                 mapping.setdefault(lbl, lbl)
             unique_standard = list(dict.fromkeys(mapping.values()))
+            
+            # Track the best mapping regardless of whether it meets threshold
+            if len(unique_standard) < best_unique_count:
+                best_mapping = mapping
+                best_unique_count = len(unique_standard)
+            
+            # If we meet the threshold, return immediately
             if len(unique_standard) <= MAX_STANDARD_LABELS:
+                print(f"[INFO] LLM produced {len(unique_standard)} standardized labels (≤ {MAX_STANDARD_LABELS})")
                 return mapping
+            
             print(f"[WARN] Attempt {attempt}: LLM produced {len(unique_standard)} standardized labels (> {MAX_STANDARD_LABELS}). Retrying with stricter instructions.")
-            overflow_sample = unique_standard[MAX_STANDARD_LABELS:MAX_STANDARD_LABELS+10]
-            reduction_hint = (
-                f"You produced {len(unique_standard)} unique standardized labels which exceeds the limit of {MAX_STANDARD_LABELS}. "
-                f"Please merge semantically similar or rare subtypes so the final total is <= {MAX_STANDARD_LABELS}. "
-                f"Overflow examples: {overflow_sample}. Return ONLY the final mapping JSON."
-            )
-            adaptive_messages.append({"role": "user", "content": reduction_hint})
+            if attempt < LLM_MAX_RETRIES:  # Only add reduction hint if we have more attempts
+                overflow_sample = unique_standard[MAX_STANDARD_LABELS:MAX_STANDARD_LABELS+10]
+                reduction_hint = (
+                    f"You produced {len(unique_standard)} unique standardized labels which exceeds the limit of {MAX_STANDARD_LABELS}. "
+                    f"Please merge semantically similar or rare subtypes so the final total is <= {MAX_STANDARD_LABELS}. "
+                    f"Overflow examples: {overflow_sample}. Return ONLY the final mapping JSON."
+                )
+                adaptive_messages.append({"role": "user", "content": reduction_hint})
             continue
         except Exception as e:  # pragma: no cover - network dependent
             last_err = e
@@ -319,7 +332,15 @@ def generate_cell_type_mapping(raw_labels: List[str], model: str = LLM_MODEL) ->
             if attempt < LLM_MAX_RETRIES:
                 print(f"[INFO] Sleeping {LLM_SLEEP_BETWEEN_RETRIES}s before retry...")
                 time.sleep(LLM_SLEEP_BETWEEN_RETRIES)
-    raise RuntimeError(f"LLM mapping generation failed after {LLM_MAX_RETRIES} attempts (last error or still >{MAX_STANDARD_LABELS} labels): {last_err}")
+    
+    # If we couldn't meet the threshold, use the best mapping we got
+    if best_mapping is not None:
+        print(f"[WARN] Using best available mapping with {best_unique_count} standardized labels (> {MAX_STANDARD_LABELS} threshold)")
+        return best_mapping
+    
+    # Final fallback: if all attempts failed, create identity mapping
+    print(f"[ERROR] All LLM attempts failed, using identity mapping. Last error: {last_err}")
+    return {lbl: lbl for lbl in unique_labels}
 
 
 def apply_cell_type_mapping(adata: ad.AnnData, mapping: Dict[str, str], cell_type_key: str = CELL_TYPE_KEY) -> None:
@@ -395,9 +416,35 @@ def main():
     if RUN_LLM_STANDARDIZATION and CELL_TYPE_KEY in combined.obs:
         print("[INFO] Generating LLM-based cell type mapping...")
         try:
-            mapping = generate_cell_type_mapping(list(combined.obs[CELL_TYPE_KEY].astype(str).unique()))
+            original_labels = list(combined.obs[CELL_TYPE_KEY].astype(str).unique())
+            print(f"[DEBUG] Original cell types ({len(original_labels)}): {sorted(original_labels)}")
+            
+            mapping = generate_cell_type_mapping(original_labels)
             print(f"[INFO] Mapping size: {len(mapping)}")
+            
+            # Apply the mapping
+            original_obs = combined.obs[CELL_TYPE_KEY].copy()
             apply_cell_type_mapping(combined, mapping, CELL_TYPE_KEY)
+            
+            # Show detailed debugging information
+            harmonized_labels = list(combined.obs[CELL_TYPE_KEY].astype(str).unique())
+            print(f"[DEBUG] Harmonized cell types ({len(harmonized_labels)}): {sorted(harmonized_labels)}")
+            
+            # Show the actual mappings that were applied
+            applied_mappings = {}
+            for orig in original_labels:
+                if orig in mapping:
+                    applied_mappings[orig] = mapping[orig]
+            
+            print(f"[DEBUG] LLM mapping applied:")
+            for orig, std in sorted(applied_mappings.items()):
+                if orig != std:  # Only show mappings that actually changed
+                    print(f"  '{orig}' → '{std}'")
+            
+            unchanged_count = sum(1 for orig, std in applied_mappings.items() if orig == std)
+            changed_count = len(applied_mappings) - unchanged_count
+            print(f"[DEBUG] {changed_count} labels harmonized, {unchanged_count} unchanged")
+            
         except Exception as e:
             print(f"[WARN] LLM standardization skipped due to error: {e}")
             mapping = None
@@ -409,6 +456,15 @@ def main():
     out_path = os.path.join(BASE_DIR, OUTPUT_COMBINED_FILENAME)
     # Sanitize obs to prevent h5py TypeError (e.g., mixed object dtypes like 'nCount_RNA')
     sanitize_obs(combined)
+
+    # Final debug information before running integration methods
+    if DEBUG_MODE:
+        final_cell_types = sorted(combined.obs[CELL_TYPE_KEY].astype(str).unique())
+        print(f"[DEBUG] Final cell types ready for integration ({len(final_cell_types)}): {final_cell_types}")
+        if mapping:
+            print(f"[DEBUG] Using LLM-harmonized labels for all downstream integration methods")
+        else:
+            print(f"[DEBUG] Using original labels for all downstream integration methods")
 
     # Optional: Symphony inter-study evaluation (largest study as reference)
     if RUN_SYMPHONY:
@@ -574,16 +630,26 @@ def main():
 if __name__ == '__main__':  # pragma: no cover
     main()
     adata = ad.read_h5ad(os.path.join(BASE_DIR, OUTPUT_COMBINED_FILENAME))
-    print(f"Combined AnnData loaded with shape {adata.shape} and obs keys: {', '.join(adata.obs.keys())}")
+    print(f"[FINAL] Combined AnnData loaded with shape {adata.shape} and obs keys: {', '.join(adata.obs.keys())}")
+    
+    # Always show final cell types regardless of whether mapping was used
+    adata.obs[CELL_TYPE_KEY] = adata.obs[CELL_TYPE_KEY].astype(str)
+    unique_cell_types = sorted(adata.obs[CELL_TYPE_KEY].unique())
+    print(f"[FINAL] Unique cell types in combined data: {len(unique_cell_types)}")
+    print(f"[FINAL] Cell types: {', '.join(unique_cell_types)}")
+    
     if LABEL_MAPPING_JSON in os.listdir(BASE_DIR):
-        # Print number of celltypes
-        adata.obs[CELL_TYPE_KEY] = adata.obs[CELL_TYPE_KEY].astype(str)
-        unique_cell_types = adata.obs[CELL_TYPE_KEY].unique()
-        print(f"Unique cell types in combined data: {len(unique_cell_types)}")
-        print(f"Unique cell types: {', '.join(unique_cell_types)}")
         with open(os.path.join(BASE_DIR, LABEL_MAPPING_JSON), 'r') as f:
             mapping = json.load(f)
-            
-        print(f"Loaded cell type mapping with {len(mapping)} entries.")
+        print(f"[FINAL] Loaded cell type mapping with {len(mapping)} entries from JSON")
+        
+        # Show how many original labels were harmonized
+        changed_mappings = {k: v for k, v in mapping.items() if k != v}
+        if changed_mappings:
+            print(f"[FINAL] {len(changed_mappings)} labels were harmonized by LLM:")
+            for orig, harmonized in sorted(changed_mappings.items()):
+                print(f"  '{orig}' → '{harmonized}'")
+        else:
+            print(f"[FINAL] All labels remained unchanged (identity mapping)")
     else:
-        print(f"No label mapping JSON found at {LABEL_MAPPING_JSON}. Skipping label harmonization check.")
+        print(f"[FINAL] No label mapping JSON found - original labels were used")
