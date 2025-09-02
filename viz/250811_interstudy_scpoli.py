@@ -44,6 +44,17 @@ except Exception as e:  # pragma: no cover
     f1_score = None  # type: ignore
     accuracy_score = None  # type: ignore
 
+def _reset_categorical_variables(adata: ad.AnnData, keys: List[str]) -> None:
+    """Reset categorical variables to prevent index corruption issues."""
+    for key in keys:
+        if key in adata.obs:
+            # Convert to string, remove any NaN, then back to clean categorical
+            series = adata.obs[key].astype(str)
+            series = series.replace(['nan', 'None', 'null'], 'Unknown')
+            adata.obs[key] = pd.Categorical(series)
+            print(f"[DEBUG][scPoli] Reset categorical '{key}': {len(adata.obs[key].cat.categories)} categories")
+
+
 def _align_genes_between_studies(adata: ad.AnnData, study_key: str) -> ad.AnnData:
     """Align genes across studies to common intersection for scPoli compatibility."""
     print("[DEBUG][scPoli] Starting gene alignment across studies...")
@@ -57,7 +68,17 @@ def _align_genes_between_studies(adata: ad.AnnData, study_key: str) -> ad.AnnDat
         raise ValueError("No common genes found across studies for scPoli")
     common_list = sorted(common_genes)
     print(f"[DEBUG][scPoli] Using {len(common_list)} common genes for alignment")
-    return adata[:, common_list].copy()
+    
+    # CRITICAL: Create copy and preserve categorical variables during gene subsetting
+    aligned_adata = adata[:, common_list].copy()
+    
+    # Ensure all categorical variables are preserved correctly
+    for col in adata.obs.columns:
+        if isinstance(adata.obs[col].dtype, pd.CategoricalDtype):
+            print(f"[DEBUG][scPoli] Preserving categorical variable '{col}' during gene alignment")
+            aligned_adata.obs[col] = adata.obs[col].copy()
+    
+    return aligned_adata
 
 
 def _check_requirements():
@@ -134,34 +155,61 @@ def run_scpoli_interstudy(
     
     if missing_types:
         print(f"[INFO][scPoli] Reference study '{reference_study}' missing {len(missing_types)} cell types: {missing_types}")
-        print("[INFO][scPoli] Will augment reference with samples from other studies to ensure full coverage")
+        print("[WARN][scPoli] Skipping reference augmentation to avoid categorical corruption issues")
+        print("[WARN][scPoli] This may reduce label transfer accuracy for missing cell types")
         
-        # Create augmented reference by adding cells from other studies for missing types
+        # Skip augmentation to avoid categorical corruption that causes the indexing error
         ref_adata = _subset_by_study(adata, study_key, reference_study)
         
-        # Add representative cells for missing cell types from other studies
-        augment_cells = []
-        for missing_type in missing_types:
-            # Find studies that have this cell type
-            donor_studies = [s for s in counts.index if missing_type in study_cell_types[s] and s != reference_study]
-            if donor_studies:
-                # Take from the study with most cells of this type
-                best_donor = max(donor_studies, key=lambda x: counts[x])
-                donor_adata = _subset_by_study(adata, study_key, best_donor)
-                type_cells = donor_adata[donor_adata.obs[cell_type_key] == missing_type]
-                
-                # Take a reasonable sample (up to 50 cells per missing type)
-                n_sample = min(50, len(type_cells))
-                if n_sample > 0:
-                    sampled = type_cells[:n_sample].copy()
-                    augment_cells.append(sampled)
-                    print(f"[INFO][scPoli] Adding {n_sample} '{missing_type}' cells from study '{best_donor}'")
-        
-        # Combine reference with augmented cells
-        if augment_cells:
-            augmented_ref = ad.concat([ref_adata] + augment_cells, join='outer')
-            ref_adata = augmented_ref
-            print(f"[INFO][scPoli] Augmented reference from {counts[reference_study]} to {ref_adata.n_obs} cells with full cell type coverage")
+        # # Original augmentation code (disabled for debugging):
+        # print("[INFO][scPoli] Will augment reference with samples from other studies to ensure full coverage")
+        # 
+        # # Create augmented reference by adding cells from other studies for missing types
+        # ref_adata = _subset_by_study(adata, study_key, reference_study)
+        # 
+        # # Add representative cells for missing cell types from other studies
+        # augment_cells = []
+        # for missing_type in missing_types:
+        #     # Find studies that have this cell type
+        #     donor_studies = [s for s in counts.index if missing_type in study_cell_types[s] and s != reference_study]
+        #     if donor_studies:
+        #         # Take from the study with most cells of this type
+        #         best_donor = max(donor_studies, key=lambda x: counts[x])
+        #         donor_adata = _subset_by_study(adata, study_key, best_donor)
+        #         type_cells = donor_adata[donor_adata.obs[cell_type_key] == missing_type]
+        #         
+        #         # Take a reasonable sample (up to 50 cells per missing type)
+        #         n_sample = min(50, len(type_cells))
+        #         if n_sample > 0:
+        #             sampled = type_cells[:n_sample].copy()
+        #             augment_cells.append(sampled)
+        #             print(f"[INFO][scPoli] Adding {n_sample} '{missing_type}' cells from study '{best_donor}'")
+        # 
+        # # Combine reference with augmented cells
+        # if augment_cells:
+        #     # Debug: Check categorical variables before concatenation
+        #     print(f"[DEBUG][scPoli] Before concat - ref study categories: {ref_adata.obs[study_key].unique()}")
+        #     print(f"[DEBUG][scPoli] Before concat - ref library categories: {ref_adata.obs.get(batch_key, pd.Series()).unique()}")
+        #     
+        #     for i, aug_cell in enumerate(augment_cells):
+        #         print(f"[DEBUG][scPoli] Augment {i} - study cats: {aug_cell.obs[study_key].unique()}")
+        #         print(f"[DEBUG][scPoli] Augment {i} - library cats: {aug_cell.obs.get(batch_key, pd.Series()).unique()}")
+        #     
+        #     # Use concatenate with batch_key to avoid categorical corruption
+        #     augmented_ref = ad.concat([ref_adata] + augment_cells, join='outer', merge='unique')
+        #     ref_adata = augmented_ref
+        #     
+        #     # Debug: Check categorical variables after concatenation
+        #     print(f"[DEBUG][scPoli] After concat - study categories: {ref_adata.obs[study_key].unique()}")
+        #     print(f"[DEBUG][scPoli] After concat - library categories: {ref_adata.obs.get(batch_key, pd.Series()).unique()}")
+        #     
+        #     # Ensure categorical variables are properly encoded as strings then back to categories
+        #     ref_adata.obs[study_key] = ref_adata.obs[study_key].astype(str).astype('category')
+        #     if batch_key and batch_key in ref_adata.obs:
+        #         ref_adata.obs[batch_key] = ref_adata.obs[batch_key].astype(str).astype('category')
+        #     ref_adata.obs[cell_type_key] = ref_adata.obs[cell_type_key].astype(str).astype('category')
+        #     
+        #     print(f"[INFO][scPoli] Augmented reference from {counts[reference_study]} to {ref_adata.n_obs} cells with full cell type coverage")
     else:
         ref_adata = _subset_by_study(adata, study_key, reference_study)
         print(f"[INFO][scPoli] Reference study '{reference_study}' has complete cell type coverage")
@@ -217,6 +265,12 @@ def run_scpoli_interstudy(
     if hasattr(ref_adata.X, 'dtype') and ref_adata.X.dtype != np.float32:
         ref_adata.X = ref_adata.X.astype(np.float32)
     
+    # CRITICAL: Convert sparse matrices to dense if needed to avoid indexing issues
+    # The axis 1 index error often occurs with sparse matrix corruption
+    if hasattr(ref_adata.X, 'toarray'):
+        print(f"[DEBUG][scPoli] Converting sparse matrix to dense to avoid indexing errors")
+        ref_adata.X = ref_adata.X.toarray().astype(np.float32)
+    
     # Clean cell type labels to remove any problematic characters/formats
     ref_adata.obs[cell_type_key] = ref_adata.obs[cell_type_key].astype(str)
     
@@ -225,6 +279,34 @@ def run_scpoli_interstudy(
     if batch_key and batch_key in ref_adata.obs:
         condition_keys.append(batch_key)
 
+    # CRITICAL: Reset all categorical variables to prevent corruption
+    print("[DEBUG][scPoli] Resetting categorical variables to prevent index corruption...")
+    _reset_categorical_variables(ref_adata, condition_keys + [cell_type_key])
+
+    # CRITICAL: Debug categorical variables before scPoli initialization
+    print(f"[DEBUG][scPoli] FINAL CHECK before model init:")
+    print(f"[DEBUG][scPoli] Reference dimensions: {ref_adata.shape}")
+    print(f"[DEBUG][scPoli] Gene set length: {len(final_genes)}")
+    print(f"[DEBUG][scPoli] Condition keys: {condition_keys}")
+    
+    for key in condition_keys + [cell_type_key]:
+        if key in ref_adata.obs:
+            cats = ref_adata.obs[key].unique()
+            print(f"[DEBUG][scPoli] Key '{key}': {len(cats)} categories = {sorted(cats)}")
+            # Check for any NaN or problematic values
+            nan_count = ref_adata.obs[key].isnull().sum()
+            if nan_count > 0:
+                print(f"[ERROR][scPoli] Key '{key}' has {nan_count} NaN values!")
+                # Fill NaN values with string representation
+                ref_adata.obs[key] = ref_adata.obs[key].fillna('Unknown').astype(str).astype('category')
+        else:
+            print(f"[ERROR][scPoli] Key '{key}' missing from obs!")
+    
+    # Additional check for X data integrity
+    print(f"[DEBUG][scPoli] X matrix info: shape={ref_adata.X.shape}, dtype={ref_adata.X.dtype}")
+    if hasattr(ref_adata.X, 'nnz'):
+        print(f"[DEBUG][scPoli] X is sparse, nnz={ref_adata.X.nnz}")
+    
     print(f"[DEBUG][scPoli] Reference dimensions before model init: {ref_adata.shape}")
     print(f"[DEBUG][scPoli] Reference gene set length: {len(final_genes)}")
     print(f"[DEBUG][scPoli] Reference condition keys: {condition_keys}")
@@ -293,8 +375,31 @@ def run_scpoli_interstudy(
         if hasattr(query_adata.X, 'dtype') and query_adata.X.dtype != np.float32:
             query_adata.X = query_adata.X.astype(np.float32)
         
+        # CRITICAL: Convert sparse matrices to dense if needed to avoid indexing issues
+        if hasattr(query_adata.X, 'toarray'):
+            print(f"[DEBUG][scPoli] Converting query sparse matrix to dense to avoid indexing errors")
+            query_adata.X = query_adata.X.toarray().astype(np.float32)
+        
         # Clean query cell type labels
         query_adata.obs[cell_type_key] = query_adata.obs[cell_type_key].astype(str)
+        
+        # CRITICAL: Ensure query categorical variables match reference encoding
+        print(f"[DEBUG][scPoli] Query '{study_name}' categorical debugging:")
+        _reset_categorical_variables(query_adata, condition_keys + [cell_type_key])
+        
+        for key in condition_keys + [cell_type_key]:
+            if key in query_adata.obs:
+                cats = query_adata.obs[key].unique()
+                print(f"[DEBUG][scPoli] Query key '{key}': {len(cats)} categories = {sorted(cats)}")
+                # Check for NaN values
+                nan_count = query_adata.obs[key].isnull().sum()
+                if nan_count > 0:
+                    print(f"[ERROR][scPoli] Query key '{key}' has {nan_count} NaN values!")
+                    query_adata.obs[key] = query_adata.obs[key].fillna('Unknown').astype(str).astype('category')
+                # Ensure consistency with reference
+                query_adata.obs[key] = query_adata.obs[key].astype(str).astype('category')
+            else:
+                print(f"[ERROR][scPoli] Query key '{key}' missing from obs!")
         
         # Verify gene order consistency
         if not np.array_equal(query_adata.var_names, ref_adata.var_names):
