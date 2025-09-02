@@ -92,17 +92,24 @@ def run_scpoli_interstudy(
     reference_study = counts.idxmax()
     print(f"[INFO][scPoli] Using '{reference_study}' as reference (n={counts.max()} cells)")
 
+    # Store reference study data  
     ref_adata = _subset_by_study(adata, study_key, reference_study)
     if 0 < reference_fraction < 1.0:
         ref_indices = np.random.default_rng(seed).choice(ref_adata.obs_names, size=int(len(ref_adata)*reference_fraction), replace=False)
         ref_adata = ref_adata[ref_indices].copy()
         print(f"[INFO][scPoli] Subsampled reference to {ref_adata.n_obs} cells (fraction={reference_fraction})")
 
-    # Basic filtering to remove genes with all zeros
-    sc.pp.filter_genes(ref_adata, min_counts=1)
-
-    condition_key = study_key  # treat study as condition for integration
-    condition_keys = condition_key
+    # Clean and preprocess reference data following scPoli vignette
+    # Filter genes with minimal expression
+    sc.pp.filter_genes(ref_adata, min_cells=3)
+    
+    # Clean cell type labels to remove any problematic characters/formats
+    ref_adata.obs[cell_type_key] = ref_adata.obs[cell_type_key].astype(str)
+    
+    # Setup condition keys - use study as the main condition
+    condition_keys = [study_key]
+    if batch_key and batch_key in ref_adata.obs:
+        condition_keys.append(batch_key)
 
     print("[INFO][scPoli] Initializing reference scPoli model...")
     model = scPoli(
@@ -149,48 +156,67 @@ def run_scpoli_interstudy(
             continue
         if max_queries is not None and processed_queries >= max_queries:
             break
+            
         query_adata = _subset_by_study(adata, study_key, study_name)
-        # Align genes intersection
-        common = ref_adata.var_names.intersection(query_adata.var_names)
-        if len(common) == 0:
+        
+        # Align genes intersection - very important!
+        common_genes = ref_adata.var_names.intersection(query_adata.var_names)
+        if len(common_genes) == 0:
             print(f"[WARN][scPoli] No overlapping genes with query {study_name}; skipping.")
             continue
-        query_adata = query_adata[:, common].copy()
-        # Some preprocessing to ensure gene order matches reference (subset)
-        ref_sub = ref_adata[:, common].copy()
-
+            
+        # Subset both reference and query to common genes
+        query_adata = query_adata[:, common_genes].copy()
+        # Important: also subset reference for consistency
+        ref_subset = ref_adata[:, common_genes].copy()
+        
+        # Clean query cell type labels
+        query_adata.obs[cell_type_key] = query_adata.obs[cell_type_key].astype(str)
+        
+        # Filter genes in query as well
+        sc.pp.filter_genes(query_adata, min_cells=1)
+        
         print(f"[INFO][scPoli] Loading query data for study '{study_name}' (n={query_adata.n_obs})")
-        query_model = scPoli.load_query_data(
-            adata=query_adata,
-            reference_model=model,
-            labeled_indices=[],  # treat as unlabeled for adaptation
-        )
-        query_model.train(
-            n_epochs=total_epochs,
-            pretraining_epochs=pretraining_epochs,
-            eta=eta,
-        )
-        results = query_model.classify(query_adata, scale_uncertainties=True)
-        preds = results[cell_type_key]['preds']
-        uncert = results[cell_type_key]['uncert']
-        true_labels = query_adata.obs[cell_type_key].astype(str).tolist()
-        pred_labels = preds.tolist()
-        metrics = _evaluate(true_labels, pred_labels)
-        metrics_rows.append({
-            'query_study': study_name,
-            'n_cells': len(query_adata),
-            **metrics,
-        })
+        
+        try:
+            query_model = scPoli.load_query_data(
+                adata=query_adata,
+                reference_model=model,
+                labeled_indices=[],  # treat as unlabeled for adaptation
+            )
+            
+            query_model.train(
+                n_epochs=total_epochs,
+                pretraining_epochs=pretraining_epochs,
+                eta=eta,
+            )
+            
+            results = query_model.classify(query_adata, scale_uncertainties=True)
+            preds = results[cell_type_key]['preds']
+            uncert = results[cell_type_key]['uncert']
+            
+            true_labels = query_adata.obs[cell_type_key].astype(str).tolist()
+            pred_labels = preds.tolist()
+            metrics = _evaluate(true_labels, pred_labels)
+            metrics_rows.append({
+                'query_study': study_name,
+                'n_cells': len(query_adata),
+                **metrics,
+            })
 
-        # Latent
-        query_latent = query_model.get_latent(query_adata, mean=True)
-        # Store per-cell
-        for cid, row, pl, ul in zip(query_adata.obs_names, query_latent, pred_labels, uncert.tolist()):
-            query_latents[cid] = row.astype(np.float32, copy=False)
-            query_preds[cid] = pl
-            query_uncerts[cid] = float(ul)
+            # Latent
+            query_latent = query_model.get_latent(query_adata, mean=True)
+            # Store per-cell
+            for cid, row, pl, ul in zip(query_adata.obs_names, query_latent, pred_labels, uncert.tolist()):
+                query_latents[cid] = row.astype(np.float32, copy=False)
+                query_preds[cid] = pl
+                query_uncerts[cid] = float(ul)
 
-        processed_queries += 1
+            processed_queries += 1
+            
+        except Exception as e:
+            print(f"[WARN][scPoli] Failed to process query {study_name}: {e}")
+            continue
 
     metrics_df = pd.DataFrame(metrics_rows).sort_values('query_study')
     if not metrics_df.empty:
