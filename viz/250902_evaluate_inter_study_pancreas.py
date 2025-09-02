@@ -845,7 +845,7 @@ def main():
                     try:
                         import subprocess
                         if os.path.exists(figures_dir):
-                            gdrive_path = 'GDrive:KidneyAtlas/interstudy_figures/'
+                            gdrive_path = 'GDrive:PancreasAtlas/interstudy_figures/'
                             subprocess.run(['rclone', 'copy', '--progress', figures_dir, gdrive_path])
                             print(f"[INFO] Results uploaded to {gdrive_path}")
                     except Exception as e:
