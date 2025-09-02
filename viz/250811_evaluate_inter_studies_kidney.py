@@ -616,63 +616,148 @@ def main():
             else:
                 print(f'[INFO] Evaluating {len(available_obsms)} embeddings with scIB...')
                 
-                # Setup scIB benchmarker similar to intra-studies script
-                biocons = BioConservation(isolated_labels=False)
-                bm = Benchmarker(
-                    combined,
-                    batch_key=STUDY_KEY,  # Use study as batch key for inter-study evaluation
-                    label_key=CELL_TYPE_KEY,
-                    embedding_obsm_keys=available_obsms,
-                    pre_integrated_embedding_obsm_key="X_pca" if "X_pca" in available_obsms else available_obsms[0],
-                    bio_conservation_metrics=biocons,
-                    batch_correction_metrics=BatchCorrection(),
-                    n_jobs=-1,
-                )
-                
-                print("[INFO] Preparing scIB benchmarker...")
-                bm.prepare()
-                
-                print("[INFO] Running scIB benchmark...")
-                bm.benchmark()
-                
-                print("[INFO] Generating scIB results...")
-                gc.collect()
-                
-                # Create figures directory
-                figures_dir = os.path.join(BASE_DIR, 'interstudy_figures')
-                os.makedirs(figures_dir, exist_ok=True)
-                
-                # Plot results table
-                bm.plot_results_table(
-                    show=False, 
-                    min_max_scale=False,
-                    save_dir=figures_dir
-                )
-                
-                # Save results to CSV
-                results_df = bm.get_results()
-                results_csv_path = os.path.join(figures_dir, f'scib_results_interstudy_{"debug" if DEBUG_MODE else "full"}.csv')
-                results_df.to_csv(results_csv_path)
-                
-                print(f"[INFO] scIB evaluation complete")
-                print(f"[INFO] Results saved to: {results_csv_path}")
-                print(f"[INFO] Figures saved to: {figures_dir}")
-                
-                # Print summary of results
-                print(f"[INFO] scIB Results Summary:")
-                print(results_df.round(3))
-                
-                # Upload results if configured
-                try:
-                    import subprocess
-                    if os.path.exists(figures_dir):
-                        gdrive_path = 'GDrive:KidneyAtlas/interstudy_figures/'
-                        subprocess.run(['rclone', 'copy', '--progress', figures_dir, gdrive_path])
-                        print(f"[INFO] Results uploaded to {gdrive_path}")
-                except Exception as e:
-                    print(f"[WARN] Upload failed: {e}")
+                # Check and clean embeddings for NaN values before scIB evaluation
+                print("[INFO] Checking embeddings for NaN values...")
+                clean_obsms = []
+                for obsm_key in available_obsms:
+                    embedding = combined.obsm[obsm_key]
+                    n_nan = np.isnan(embedding).sum()
+                    n_inf = np.isinf(embedding).sum()
                     
-                gc.collect()
+                    if n_nan > 0 or n_inf > 0:
+                        print(f"[WARN] {obsm_key}: Found {n_nan} NaN and {n_inf} infinite values, cleaning...")
+                        # Replace NaN and infinite values with zeros
+                        embedding_clean = np.nan_to_num(embedding, nan=0.0, posinf=0.0, neginf=0.0)
+                        
+                        # Ensure float64 dtype for stability
+                        embedding_clean = embedding_clean.astype(np.float64)
+                        
+                        # Final verification
+                        if np.isnan(embedding_clean).sum() == 0 and np.isinf(embedding_clean).sum() == 0:
+                            combined.obsm[obsm_key] = embedding_clean
+                            clean_obsms.append(obsm_key)
+                            print(f"[INFO] {obsm_key}: Successfully cleaned problematic values")
+                        else:
+                            print(f"[ERROR] {obsm_key}: Failed to clean problematic values, excluding from evaluation")
+                    else:
+                        print(f"[INFO] {obsm_key}: No problematic values detected")
+                        # Still ensure consistent dtype
+                        combined.obsm[obsm_key] = embedding.astype(np.float64)
+                        clean_obsms.append(obsm_key)
+                
+                if not clean_obsms:
+                    print('[ERROR] No clean embeddings available for scIB evaluation; skipping.')
+                else:
+                    print(f'[INFO] Using {len(clean_obsms)} clean embeddings for scIB evaluation: {clean_obsms}')
+                    
+                    # Additional data validation
+                    print("[INFO] Validating AnnData object for scIB compatibility...")
+                    
+                    # Ensure we have PCA as baseline if it's missing
+                    if 'X_pca' not in combined.obsm and 'X_pca' not in clean_obsms:
+                        print("[INFO] X_pca missing, computing PCA for baseline comparison...")
+                        try:
+                            # Ensure we have the raw or log-normalized data for PCA
+                            if combined.X is not None:
+                                sc.tl.pca(combined, n_comps=50)
+                                if 'X_pca' in combined.obsm:
+                                    clean_obsms.append('X_pca')
+                                    print("[INFO] Successfully computed X_pca baseline")
+                                else:
+                                    print("[WARN] PCA computation did not produce X_pca")
+                            else:
+                                print("[WARN] No .X data available for PCA computation")
+                        except Exception as e:
+                            print(f"[WARN] PCA computation failed: {e}")
+                    
+                    # Check for missing observations in key columns
+                    for key in [STUDY_KEY, CELL_TYPE_KEY]:
+                        if key in combined.obs:
+                            n_na = combined.obs[key].isna().sum()
+                            if n_na > 0:
+                                print(f"[WARN] Found {n_na} missing values in {key}, filling with 'Unknown'")
+                                combined.obs[key] = combined.obs[key].fillna('Unknown').astype('category')
+                            else:
+                                print(f"[INFO] {key}: No missing values")
+                                combined.obs[key] = combined.obs[key].astype('category')
+                    
+                    print("[INFO] Setting up scIB Benchmarker...")
+                    
+                    # Force garbage collection before intensive operations
+                    gc.collect()
+                    
+                    # Setup scIB metrics
+                    biocons = BioConservation(isolated_labels=False)
+                    
+                    print(f"[INFO] Final embeddings for scIB evaluation: {clean_obsms}")
+                    print(f"[INFO] Batch key: {STUDY_KEY}, Label key: {CELL_TYPE_KEY}")
+                    print(f"[INFO] Pre-integrated baseline: {'X_pca' if 'X_pca' in clean_obsms else clean_obsms[0]}")
+                    
+                    bm = Benchmarker(
+                        combined,
+                        batch_key=STUDY_KEY,  # Use study as batch key for inter-study evaluation
+                        label_key=CELL_TYPE_KEY,
+                        embedding_obsm_keys=clean_obsms,  # Use cleaned embeddings
+                        pre_integrated_embedding_obsm_key="X_pca" if "X_pca" in clean_obsms else clean_obsms[0],
+                        bio_conservation_metrics=biocons,
+                        batch_correction_metrics=BatchCorrection(),
+                        n_jobs=-1,
+                    )
+                    
+                    print("[INFO] Preparing scIB benchmarker...")
+                    try:
+                        bm.prepare()
+                        print("[INFO] scIB benchmarker preparation successful")
+                    except Exception as e:
+                        print(f"[ERROR] scIB benchmarker preparation failed: {e}")
+                        print("[INFO] Attempting to continue with benchmark...")
+                    
+                    print("[INFO] Running scIB benchmark...")
+                    try:
+                        bm.benchmark()
+                        print("[INFO] scIB benchmark execution successful")
+                    except Exception as e:
+                        print(f"[ERROR] scIB benchmark execution failed: {e}")
+                        raise
+                    
+                    print("[INFO] Generating scIB results...")
+                    gc.collect()
+                    
+                    # Create figures directory
+                    figures_dir = os.path.join(BASE_DIR, 'interstudy_figures')
+                    os.makedirs(figures_dir, exist_ok=True)
+                    
+                    # Plot results table
+                    bm.plot_results_table(
+                        show=False, 
+                        min_max_scale=False,
+                        save_dir=figures_dir
+                    )
+                    
+                    # Save results to CSV
+                    results_df = bm.get_results()
+                    results_csv_path = os.path.join(figures_dir, f'scib_results_interstudy_{"debug" if DEBUG_MODE else "full"}.csv')
+                    results_df.to_csv(results_csv_path)
+                    
+                    print(f"[INFO] scIB evaluation complete")
+                    print(f"[INFO] Results saved to: {results_csv_path}")
+                    print(f"[INFO] Figures saved to: {figures_dir}")
+                    
+                    # Print summary of results
+                    print(f"[INFO] scIB Results Summary:")
+                    print(results_df.round(3))
+                    
+                    # Upload results if configured
+                    try:
+                        import subprocess
+                        if os.path.exists(figures_dir):
+                            gdrive_path = 'GDrive:KidneyAtlas/interstudy_figures/'
+                            subprocess.run(['rclone', 'copy', '--progress', figures_dir, gdrive_path])
+                            print(f"[INFO] Results uploaded to {gdrive_path}")
+                    except Exception as e:
+                        print(f"[WARN] Upload failed: {e}")
+                        
+                    gc.collect()
                 
         except Exception as e:
             print(f"[ERROR] scIB Benchmarker evaluation failed: {e}")
