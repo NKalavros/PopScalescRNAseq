@@ -36,7 +36,7 @@ import numpy as np  # type: ignore
 # ------------------------------- Configuration ---------------------------------
 BASE_DIR = '/gpfs/scratch/nk4167/PancreasAtlas'  # Adjust as needed
 STUDIES = '''CRA001160  HTAN          SRP272677  SRP284880  SRP407590
-SRP277796  SRP389087  SRP429394        │
+SRP277796  SRP389087  SRP429394
 HRA004556  NYU           SRP277925  SRP396295     '''
 STUDIES = [s.strip() for s in STUDIES.split() if s.strip()]
 print(f"[INFO] Studies to load: {STUDIES}")
