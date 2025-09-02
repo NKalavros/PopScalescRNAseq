@@ -402,7 +402,7 @@ def main():
         print("[ERROR] No studies loaded; exiting.")
         return
     combined = concatenate(adatas)
-    
+    print(combined.obsm.keys())
     # Clean cell type labels after concatenation to ensure consistency
     print("[INFO] Final cell type label cleaning after concatenation...")
     clean_cell_type_labels(combined, CELL_TYPE_KEY)
