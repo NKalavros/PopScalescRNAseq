@@ -567,7 +567,7 @@ def main():
                             cell_type_key=CELL_TYPE_KEY,
                             embedding_key='X_scarches',
                             reference_max_epochs=n_epochs,
-                            n_latent=n_latent,
+                            latent_dim=n_latent,
                         )
                         scarches_csv = os.path.join(BASE_DIR, SCARCHES_METRICS_CSV)
                         scarches_metrics_df.to_csv(scarches_csv, index=False)
