@@ -261,21 +261,32 @@ def run_scarches_interstudy(
             print(f"[WARN][scArches] Found NaN/inf values in reference latent, replacing with zeros")
             ref_emb_adata.X = np.nan_to_num(ref_emb_adata.X, nan=0.0, posinf=0.0, neginf=0.0)
         
-        # 2. Add small noise to prevent zero standard deviations (the root cause of divide-by-zero)
-        print(f"[DEBUG][scArches] Adding minimal noise to prevent zero standard deviations")
-        noise_scale = 1e-8  # Extremely small noise that won't affect results but prevents zero std
+        # 2. First normalize to reasonable range to prevent numerical overflow
+        print(f"[DEBUG][scArches] Normalizing reference embedding to prevent numerical overflow")
+        max_abs_val = np.max(np.abs(ref_emb_adata.X))
+        if max_abs_val > 1e-8:  # Only normalize if not already tiny
+            ref_emb_adata.X = ref_emb_adata.X / max_abs_val
+        
+        # 3. Add noise to prevent zero standard deviations AFTER normalization
+        print(f"[DEBUG][scArches] Adding noise to prevent zero standard deviations")
+        noise_scale = 1e-6  # Larger noise scale to be more aggressive
         ref_emb_adata.X += np.random.RandomState(seed).normal(0, noise_scale, ref_emb_adata.X.shape).astype(np.float32)
         
-        # 3. Ensure no zero standard deviation columns
+        # 4. Check standard deviations and aggressively fix any that are still too small
         stds = np.std(ref_emb_adata.X, axis=0)
-        zero_std_cols = stds < 1e-10
-        if np.any(zero_std_cols):
-            print(f"[WARN][scArches] Found {np.sum(zero_std_cols)} columns with near-zero std, adding noise")
-            ref_emb_adata.X[:, zero_std_cols] += np.random.RandomState(seed+1).normal(0, 1e-6, (ref_emb_adata.X.shape[0], np.sum(zero_std_cols))).astype(np.float32)
+        problematic_cols = stds < 1e-6  # More aggressive threshold
+        if np.any(problematic_cols):
+            print(f"[WARN][scArches] Found {np.sum(problematic_cols)} columns with problematic std, fixing aggressively")
+            # Replace problematic columns with random normal values
+            ref_emb_adata.X[:, problematic_cols] = np.random.RandomState(seed+2).normal(0, 1e-4, (ref_emb_adata.X.shape[0], np.sum(problematic_cols))).astype(np.float32)
         
-        # 4. Normalize to reasonable range to prevent numerical overflow
-        print(f"[DEBUG][scArches] Normalizing reference embedding to prevent numerical overflow")
-        ref_emb_adata.X = ref_emb_adata.X / (np.max(np.abs(ref_emb_adata.X)) + 1e-8)
+        # 5. Final check: ensure ALL standard deviations are reasonable
+        final_stds = np.std(ref_emb_adata.X, axis=0)
+        min_std = np.min(final_stds)
+        print(f"[DEBUG][scArches] Final reference std check: min={min_std:.8f}, max={np.max(final_stds):.8f}")
+        if min_std < 1e-8:
+            print(f"[ERROR][scArches] Still have near-zero std after fixing! Adding global noise...")
+            ref_emb_adata.X += np.random.RandomState(seed+3).normal(0, 1e-5, ref_emb_adata.X.shape).astype(np.float32)
         
         print(f"[DEBUG][scArches] Reference embedding shape: {ref_emb_adata.X.shape}, dtype: {ref_emb_adata.X.dtype}")
         print(f"[DEBUG][scArches] Reference embedding stats: min={np.min(ref_emb_adata.X):.6f}, max={np.max(ref_emb_adata.X):.6f}, std={np.std(ref_emb_adata.X):.6f}")
@@ -348,23 +359,34 @@ def run_scarches_interstudy(
                     print(f"[WARN][scArches] Found NaN/inf values in query latent, replacing with zeros")
                     q_emb_adata.X = np.nan_to_num(q_emb_adata.X, nan=0.0, posinf=0.0, neginf=0.0)
                 
-                # 2. Add small noise to prevent zero standard deviations (the root cause of divide-by-zero)
-                print(f"[DEBUG][scArches] Adding minimal noise to prevent zero standard deviations")
-                noise_scale = 1e-8  # Extremely small noise that won't affect results but prevents zero std
+                # 2. First normalize to reasonable range to prevent numerical overflow
+                print(f"[DEBUG][scArches] Normalizing query embedding to prevent numerical overflow")
+                max_abs_val = np.max(np.abs(q_emb_adata.X))
+                if max_abs_val > 1e-8:  # Only normalize if not already tiny
+                    q_emb_adata.X = q_emb_adata.X / max_abs_val
+                
+                # 3. Add noise to prevent zero standard deviations AFTER normalization
+                print(f"[DEBUG][scArches] Adding noise to prevent zero standard deviations")
+                noise_scale = 1e-6  # Larger noise scale to be more aggressive
                 # Ensure seed is within valid range [0, 2**32-1]
                 query_seed = abs(hash(study_name)) % (2**32 - 1)
                 q_emb_adata.X += np.random.RandomState(query_seed).normal(0, noise_scale, q_emb_adata.X.shape).astype(np.float32)
                 
-                # 3. Ensure no zero standard deviation columns
+                # 4. Check standard deviations and aggressively fix any that are still too small
                 stds = np.std(q_emb_adata.X, axis=0)
-                zero_std_cols = stds < 1e-10
-                if np.any(zero_std_cols):
-                    print(f"[WARN][scArches] Found {np.sum(zero_std_cols)} columns with near-zero std, adding noise")
-                    q_emb_adata.X[:, zero_std_cols] += np.random.RandomState(query_seed+1).normal(0, 1e-6, (q_emb_adata.X.shape[0], np.sum(zero_std_cols))).astype(np.float32)
+                problematic_cols = stds < 1e-6  # More aggressive threshold
+                if np.any(problematic_cols):
+                    print(f"[WARN][scArches] Found {np.sum(problematic_cols)} columns with problematic std, fixing aggressively")
+                    # Replace problematic columns with random normal values
+                    q_emb_adata.X[:, problematic_cols] = np.random.RandomState(query_seed+2).normal(0, 1e-4, (q_emb_adata.X.shape[0], np.sum(problematic_cols))).astype(np.float32)
                 
-                # 4. Normalize to reasonable range to prevent numerical overflow (using same scale as reference)
-                print(f"[DEBUG][scArches] Normalizing query embedding to prevent numerical overflow")
-                q_emb_adata.X = q_emb_adata.X / (np.max(np.abs(q_emb_adata.X)) + 1e-8)
+                # 5. Final check: ensure ALL standard deviations are reasonable
+                final_stds = np.std(q_emb_adata.X, axis=0)
+                min_std = np.min(final_stds)
+                print(f"[DEBUG][scArches] Final query std check: min={min_std:.8f}, max={np.max(final_stds):.8f}")
+                if min_std < 1e-8:
+                    print(f"[ERROR][scArches] Still have near-zero std after fixing! Adding global noise...")
+                    q_emb_adata.X += np.random.RandomState(query_seed+3).normal(0, 1e-5, q_emb_adata.X.shape).astype(np.float32)
                 
                 print(f"[DEBUG][scArches] Query embedding shape: {q_emb_adata.X.shape}, dtype: {q_emb_adata.X.dtype}")
                 print(f"[DEBUG][scArches] Query embedding stats: min={np.min(q_emb_adata.X):.6f}, max={np.max(q_emb_adata.X):.6f}, std={np.std(q_emb_adata.X):.6f}")
