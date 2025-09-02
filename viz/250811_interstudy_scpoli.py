@@ -100,8 +100,30 @@ def run_scpoli_interstudy(
         print(f"[INFO][scPoli] Subsampled reference to {ref_adata.n_obs} cells (fraction={reference_fraction})")
 
     # Clean and preprocess reference data following scPoli vignette
-    # Filter genes with minimal expression
+    # Filter genes with minimal expression BEFORE finding common genes
     sc.pp.filter_genes(ref_adata, min_cells=3)
+    
+    # Get all studies to find common genes across ALL datasets
+    all_studies = list(counts.index)
+    all_gene_sets = []
+    
+    # Collect genes from each study after basic filtering
+    for study in all_studies:
+        study_adata = _subset_by_study(adata, study_key, study)
+        sc.pp.filter_genes(study_adata, min_cells=1)  # Minimal filtering for each study
+        all_gene_sets.append(set(study_adata.var_names))
+    
+    # Find intersection of all gene sets - genes present in ALL studies
+    common_genes = set.intersection(*all_gene_sets)
+    common_genes = sorted(list(common_genes))  # Sort for consistent ordering
+    
+    if len(common_genes) == 0:
+        raise ValueError("[ERROR][scPoli] No genes common to all studies after filtering")
+    
+    print(f"[INFO][scPoli] Found {len(common_genes)} genes common to all studies")
+    
+    # Subset reference to common genes
+    ref_adata = ref_adata[:, common_genes].copy()
     
     # Clean cell type labels to remove any problematic characters/formats
     ref_adata.obs[cell_type_key] = ref_adata.obs[cell_type_key].astype(str)
@@ -159,24 +181,13 @@ def run_scpoli_interstudy(
             
         query_adata = _subset_by_study(adata, study_key, study_name)
         
-        # Align genes intersection - very important!
-        common_genes = ref_adata.var_names.intersection(query_adata.var_names)
-        if len(common_genes) == 0:
-            print(f"[WARN][scPoli] No overlapping genes with query {study_name}; skipping.")
-            continue
-            
-        # Subset both reference and query to common genes
+        # Use the pre-computed common genes - this ensures all studies have same dimensions
         query_adata = query_adata[:, common_genes].copy()
-        # Important: also subset reference for consistency
-        ref_subset = ref_adata[:, common_genes].copy()
         
         # Clean query cell type labels
         query_adata.obs[cell_type_key] = query_adata.obs[cell_type_key].astype(str)
         
-        # Filter genes in query as well
-        sc.pp.filter_genes(query_adata, min_cells=1)
-        
-        print(f"[INFO][scPoli] Loading query data for study '{study_name}' (n={query_adata.n_obs})")
+        print(f"[INFO][scPoli] Loading query data for study '{study_name}' (n={query_adata.n_obs}, genes={query_adata.n_vars})")
         
         try:
             query_model = scPoli.load_query_data(
