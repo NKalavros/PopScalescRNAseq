@@ -89,13 +89,13 @@ def run_scib_benchmark(
         ari_=True,
         nmi_=True,
         silhouette_=True,  # silhouette label and batch ASW
-        graph_conn_=True,
+        graph_conn_=False,
         pcr_=True,
         ilisi_=full,  # only in full
         clisi_=full,  # only in full
-        kBET_=False if preset != 'all' else True,
-        isolated_labels_f1_=True,
-        isolated_labels_asw_=True,
+        kBET_=False,  # Always disable kBET (very slow)
+        isolated_labels_f1_=True,  # Disable isolated labels (very slow clustering optimization)
+        isolated_labels_asw_=False,  # Disable isolated labels (very slow clustering optimization)
         hvg_score_=False,
         cell_cycle_=False,
         trajectory_=False,
