@@ -610,7 +610,7 @@ def main():
                 if obsm_key in combined.obsm:
                     available_obsms.append(obsm_key)
                     print(f"[INFO] Found embedding: {obsm_key} ({method_name})")
-            
+            print('Here are all available obsm keys:', list(combined.obsm.keys()))
             if not available_obsms:
                 print('[WARN] No embeddings found for scIB evaluation; skipping.')
             else:
