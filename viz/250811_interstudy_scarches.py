@@ -245,8 +245,9 @@ def run_scarches_interstudy(
         try:
             q_prep = sca.models.SCANVI.prepare_query_anndata(adata=query_adata, reference_model=tmp_dir, inplace=False)  # type: ignore[attr-defined]
         except Exception as e:
-            print(f"[WARN][scArches] prepare_query_anndata failed for study {study_name}: {e}; skipping.")
-            continue
+            print(f"[ERROR][scArches] prepare_query_anndata failed for study {study_name}: {e}")
+            print(f"[ERROR][scArches] This indicates gene alignment issues between reference and query")
+            raise RuntimeError(f"scArches prepare_query_anndata failed for study {study_name}: {e}")
         if cell_type_key in q_prep.obs:
             q_prep.obs[cell_type_key] = unlabeled_category
         try:
@@ -254,13 +255,21 @@ def run_scarches_interstudy(
             q_model.train(max_epochs=query_max_epochs, **early_stop_ref)
             q_latent = q_model.get_latent_representation(q_prep)
         except Exception as e:
-            print(f"[WARN][scArches] Surgery failed for study {study_name}: {e}; skipping.")
-            continue
+            print(f"[ERROR][scArches] Surgery failed for study {study_name}: {e}")
+            print(f"[ERROR][scArches] This indicates gene alignment issues in scArches surgery")
+            raise RuntimeError(f"scArches surgery failed for study {study_name}: {e}")
         try:
             if knn_trainer is not None:
                 import anndata as _ad  # Import here for optional functionality
                 q_emb_adata = _ad.AnnData(q_latent)
                 q_emb_adata.X = q_latent
+                
+                # Debug information about shapes before KNN transfer
+                print(f"[DEBUG][scArches] Reference embedding shape: {ref_emb_adata.shape}")
+                print(f"[DEBUG][scArches] Query embedding shape: {q_emb_adata.shape}")
+                print(f"[DEBUG][scArches] Query latent shape: {q_latent.shape}")
+                print(f"[DEBUG][scArches] Reference has {len(ref_emb_adata.obs[cell_type_key].unique())} cell types")
+                
                 labels_df, uncert_df = sca.utils.knn.weighted_knn_transfer(  # type: ignore[attr-defined]
                     query_adata=q_emb_adata,
                     query_adata_emb='X',
@@ -271,11 +280,12 @@ def run_scarches_interstudy(
                 preds_list = labels_df[cell_type_key].astype(str).tolist()
                 uncert_list = uncert_df[cell_type_key].astype(float).tolist()
             else:
-                raise RuntimeError('KNN trainer unavailable')
-        except Exception as e:  # pragma: no cover
-            print(f"[WARN][scArches] Label transfer failed for {study_name}: {e}; using placeholders.")
-            preds_list = [unlabeled_category] * q_prep.n_obs
-            uncert_list = [1.0] * q_prep.n_obs
+                raise RuntimeError('KNN trainer unavailable - gene alignment may have failed')
+        except Exception as e:
+            print(f"[ERROR][scArches] Label transfer failed for {study_name}: {e}")
+            print(f"[ERROR][scArches] This indicates gene alignment issues between reference and query")
+            raise RuntimeError(f"scArches failed for study {study_name} due to gene alignment: {e}")
+        
         true_labels = query_adata.obs[cell_type_key].astype(str).tolist()
         metrics = _evaluate(true_labels, preds_list)
         metrics_rows.append({
