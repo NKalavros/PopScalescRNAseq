@@ -62,13 +62,14 @@ SCPOLI_METRICS_CSV = 'scpoli_interstudy_metrics_debug.csv' if DEBUG_MODE else 's
 RUN_SCARCHES =True  # Run scArches (SCANVI surgery) inter-study integration
 SCARCHES_MODULE_FILENAME = '250811_interstudy_scarches.py'
 SCARCHES_METRICS_CSV = 'scarches_interstudy_metrics_debug.csv' if DEBUG_MODE else 'scarches_interstudy_metrics.csv'
+RUN_SCIB_BENCHMARKER = True  # Run scIB benchmarker evaluation like intra-studies script
 RUN_SCIB = True  # Run scIB benchmarking across embeddings
 SCIB_MODULE_FILENAME = '250811_interstudy_scib.py'
 SCIB_METRICS_CSV = 'scib_metrics_long_debug.csv' if DEBUG_MODE else 'scib_metrics_long.csv'
 SCIB_EMBEDDINGS: List[str] = [
     'X_symphony', 'X_scpoli', 'X_scarches',  # integration methods
     # Potential foundation model embeddings (add if present):
-    'x_geneformer_helical', 'x_scgpt_helical', 'x_uce', 'x_scfoundation', 'x_transcriptformer'
+    'x_geneformer_helical', 'x_scgpt_helical', 'x_uce', 'x_scfoundation', 'x_transcriptformer','x_scimilarity'
 ]
 SCIB_BATCH_KEYS: List[str] = [STUDY_KEY, LIBRARY_KEY]
 
@@ -578,6 +579,105 @@ def main():
         print(f"[INFO] Writing label mapping JSON to {mapping_path}")
         with open(mapping_path, 'w') as f:
             json.dump(mapping, f, indent=2)
+
+    # scIB Benchmarker evaluation (like intra-studies script)
+    if RUN_SCIB_BENCHMARKER:
+        try:
+            import gc
+            from scib_metrics.benchmark import Benchmarker, BioConservation, BatchCorrection  # type: ignore[import]
+            
+            print('[INFO] Running scIB Benchmarker evaluation...')
+            
+            # Collect available embeddings from integration methods
+            available_embeddings = []
+            integration_methods = [
+                ('X_symphony', 'symphony'),
+                ('X_scpoli', 'scpoli'), 
+                ('X_scarches', 'scarches'),
+                # Foundation model embeddings if present
+                ('x_geneformer_helical', 'geneformer_helical'),
+                ('x_scgpt_helical', 'scgpt_helical'),
+                ('x_uce', 'uce'),
+                ('x_scfoundation', 'scfoundation'),
+                ('x_transcriptformer', 'transcriptformer'),
+                ('x_scimilarity', 'scimilarity'),
+                # Standard integration methods
+                ('X_pca', 'pca_unintegrated'),
+            ]
+            
+            available_obsms = []
+            for obsm_key, method_name in integration_methods:
+                if obsm_key in combined.obsm:
+                    available_obsms.append(obsm_key)
+                    print(f"[INFO] Found embedding: {obsm_key} ({method_name})")
+            
+            if not available_obsms:
+                print('[WARN] No embeddings found for scIB evaluation; skipping.')
+            else:
+                print(f'[INFO] Evaluating {len(available_obsms)} embeddings with scIB...')
+                
+                # Setup scIB benchmarker similar to intra-studies script
+                biocons = BioConservation(isolated_labels=False)
+                bm = Benchmarker(
+                    combined,
+                    batch_key=STUDY_KEY,  # Use study as batch key for inter-study evaluation
+                    label_key=CELL_TYPE_KEY,
+                    embedding_obsm_keys=available_obsms,
+                    pre_integrated_embedding_obsm_key="X_pca" if "X_pca" in available_obsms else available_obsms[0],
+                    bio_conservation_metrics=biocons,
+                    batch_correction_metrics=BatchCorrection(),
+                    n_jobs=-1,
+                )
+                
+                print("[INFO] Preparing scIB benchmarker...")
+                bm.prepare()
+                
+                print("[INFO] Running scIB benchmark...")
+                bm.benchmark()
+                
+                print("[INFO] Generating scIB results...")
+                gc.collect()
+                
+                # Create figures directory
+                figures_dir = os.path.join(BASE_DIR, 'interstudy_figures')
+                os.makedirs(figures_dir, exist_ok=True)
+                
+                # Plot results table
+                bm.plot_results_table(
+                    show=False, 
+                    min_max_scale=False,
+                    save_dir=figures_dir
+                )
+                
+                # Save results to CSV
+                results_df = bm.get_results()
+                results_csv_path = os.path.join(figures_dir, f'scib_results_interstudy_{"debug" if DEBUG_MODE else "full"}.csv')
+                results_df.to_csv(results_csv_path)
+                
+                print(f"[INFO] scIB evaluation complete")
+                print(f"[INFO] Results saved to: {results_csv_path}")
+                print(f"[INFO] Figures saved to: {figures_dir}")
+                
+                # Print summary of results
+                print(f"[INFO] scIB Results Summary:")
+                print(results_df.round(3))
+                
+                # Upload results if configured
+                try:
+                    import subprocess
+                    if os.path.exists(figures_dir):
+                        gdrive_path = 'GDrive:KidneyAtlas/interstudy_figures/'
+                        subprocess.run(['rclone', 'copy', '--progress', figures_dir, gdrive_path])
+                        print(f"[INFO] Results uploaded to {gdrive_path}")
+                except Exception as e:
+                    print(f"[WARN] Upload failed: {e}")
+                    
+                gc.collect()
+                
+        except Exception as e:
+            print(f"[ERROR] scIB Benchmarker evaluation failed: {e}")
+            import traceback
+            traceback.print_exc()
 
     # Optional: scIB benchmarking
     if RUN_SCIB:
