@@ -41,8 +41,8 @@ HRA004556  NYU           SRP277925  SRP396295     '''
 STUDIES = [s.strip() for s in STUDIES.split() if s.strip()]
 print(f"[INFO] Studies to load: {STUDIES}")
 FINAL_SUFFIX = '_final_embeddings.h5ad'
-LIBRARY_KEY = 'library_id'
-CELL_TYPE_KEY = 'cell_type'
+LIBRARY_KEY = 'orig.ident'  # Key for batch/library information in obs (biosample_id,orig.ident, Sample,SampleID, library_id)
+CELL_TYPE_KEY = 'celltype2'  # Key for cell type information in obs (FinalCellType, subclass.l1, subclass.l2 Major.subtype, cell_type, celltype_major,ClusterName_AllCells,cluster,Cluster_Idents)
 STUDY_KEY = 'study'  # New key we add
 DEBUG_MODE = True  # Set True to use only subset of cells for faster testing
 DEBUG_N_CELLS = 1000  # Number of cells to subsample per study in debug mode
