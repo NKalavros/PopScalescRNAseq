@@ -313,47 +313,17 @@ def run_scpoli_interstudy(
 
     print("[INFO][scPoli] Initializing reference scPoli model...")
     
-    # CRITICAL: Add preprocessing to prevent sparse matrix corruption during Leiden clustering
-    print(f"[DEBUG][scPoli] Preprocessing reference data to prevent kNN/Leiden errors...")
+    # CRITICAL: Skip problematic scanpy preprocessing that causes sparse matrix corruption
+    print(f"[DEBUG][scPoli] Skipping scanpy preprocessing to prevent kNN/Leiden errors...")
+    print(f"[DEBUG][scPoli] scPoli will handle its own internal preprocessing without scanpy interference")
     
-    # Only do sparse matrix operations if we still have a sparse matrix
-    if hasattr(ref_adata.X, 'eliminate_zeros'):
-        print(f"[DEBUG][scPoli] Cleaning up sparse matrix indices...")
-        ref_adata.X.eliminate_zeros()  # Clean up sparse matrix
-        
-        # Ensure the matrix is contiguous in memory
-        if hasattr(ref_adata.X, 'tocsr'):
-            ref_adata.X = ref_adata.X.tocsr()
-            ref_adata.X.sort_indices()  # Sort indices to prevent corruption
+    # Only ensure the matrix is dense and contiguous - no scanpy operations
+    if hasattr(ref_adata.X, 'toarray'):
+        print(f"[DEBUG][scPoli] Converting sparse matrix to dense to avoid indexing errors")
+        ref_adata.X = ref_adata.X.toarray().astype(np.float32)
     else:
         print(f"[DEBUG][scPoli] Working with dense matrix - ensuring contiguous memory layout")
         ref_adata.X = np.ascontiguousarray(ref_adata.X)
-    
-    # Add basic preprocessing that scanpy/scPoli expects for neighbor calculation
-    print(f"[DEBUG][scPoli] Running scanpy preprocessing for stable neighbor graphs...")
-    
-    # Create a clean copy for scanpy operations
-    ref_adata_clean = ref_adata.copy()
-    
-    try:
-        # Add basic preprocessing that's expected for neighborhood calculations
-        if 'X_pca' not in ref_adata_clean.obsm or ref_adata_clean.obsm['X_pca'].shape[1] == 0:
-            print(f"[DEBUG][scPoli] Computing PCA for stable neighbor graph...")
-            sc.tl.pca(ref_adata_clean, n_comps=min(50, ref_adata_clean.n_obs - 1, ref_adata_clean.n_vars - 1))
-        
-        # Compute neighbors with safe parameters to prevent index overflow
-        print(f"[DEBUG][scPoli] Computing neighbors with safe parameters...")
-        n_neighbors = min(15, ref_adata_clean.n_obs - 1)  # Safe neighbor count
-        sc.pp.neighbors(ref_adata_clean, n_neighbors=n_neighbors, use_rep='X_pca', random_state=42)
-        
-        print(f"[DEBUG][scPoli] Reference neighbor computation successful")
-        
-        # Use the preprocessed data for scPoli
-        ref_adata = ref_adata_clean
-        
-    except Exception as prep_error:
-        print(f"[WARN][scPoli] Reference preprocessing failed: {prep_error}, using original data")
-        # Fall back to original data if preprocessing fails
     
     model = scPoli(
         adata=ref_adata,
@@ -455,50 +425,17 @@ def run_scpoli_interstudy(
         
         print(f"[INFO][scPoli] Loading query data for study '{study_name}' (n={query_adata.n_obs}, genes={query_adata.n_vars})")
         
-        # CRITICAL: Add preprocessing to prevent sparse matrix corruption during Leiden clustering
-        print(f"[DEBUG][scPoli] Preprocessing query data to prevent kNN/Leiden errors...")
+        # CRITICAL: Skip problematic scanpy preprocessing that causes sparse matrix corruption
+        print(f"[DEBUG][scPoli] Skipping scanpy preprocessing to prevent kNN/Leiden errors...")
+        print(f"[DEBUG][scPoli] scPoli will handle its own internal preprocessing without scanpy interference")
         
-        # Only do sparse matrix operations if we still have a sparse matrix
-        if hasattr(query_adata.X, 'eliminate_zeros'):
-            print(f"[DEBUG][scPoli] Cleaning up sparse matrix indices...")
-            query_adata.X.eliminate_zeros()  # Clean up sparse matrix
-            
-            # Ensure the matrix is contiguous in memory
-            if hasattr(query_adata.X, 'tocsr'):
-                query_adata.X = query_adata.X.tocsr()
-                query_adata.X.sort_indices()  # Sort indices to prevent corruption
+        # Only ensure the matrix is dense and contiguous - no scanpy operations
+        if hasattr(query_adata.X, 'toarray'):
+            print(f"[DEBUG][scPoli] Converting query sparse matrix to dense to avoid indexing errors")
+            query_adata.X = query_adata.X.toarray().astype(np.float32)
         else:
             print(f"[DEBUG][scPoli] Working with dense matrix - ensuring contiguous memory layout")
             query_adata.X = np.ascontiguousarray(query_adata.X)
-        
-        # Add basic preprocessing that scanpy/scPoli expects for neighbor calculation
-        # This prevents the kNN graph construction from failing with corrupted indices
-        print(f"[DEBUG][scPoli] Running scanpy preprocessing for neighbor graph stability...")
-        
-        # Ensure we have a clean copy for scanpy operations
-        query_adata_clean = query_adata.copy()
-        
-        # Add basic preprocessing that's expected for neighborhood calculations
-        # This creates the necessary obsm entries that Leiden clustering needs
-        try:
-            # Only run if X_pca doesn't exist or is corrupted
-            if 'X_pca' not in query_adata_clean.obsm or query_adata_clean.obsm['X_pca'].shape[1] == 0:
-                print(f"[DEBUG][scPoli] Computing PCA for stable neighbor graph...")
-                sc.tl.pca(query_adata_clean, n_comps=min(50, query_adata_clean.n_obs - 1, query_adata_clean.n_vars - 1))
-            
-            # Compute neighbors with safe parameters to prevent index overflow
-            print(f"[DEBUG][scPoli] Computing neighbors with safe parameters...")
-            n_neighbors = min(15, query_adata_clean.n_obs - 1)  # Safe neighbor count
-            sc.pp.neighbors(query_adata_clean, n_neighbors=n_neighbors, use_rep='X_pca', random_state=42)
-            
-            print(f"[DEBUG][scPoli] Neighbor computation successful - this should prevent Leiden errors")
-            
-            # Use the preprocessed data for scPoli
-            query_adata = query_adata_clean
-            
-        except Exception as prep_error:
-            print(f"[WARN][scPoli] Preprocessing failed: {prep_error}, using original data")
-            # Fall back to original data if preprocessing fails
         
         try:
             query_model = scPoli.load_query_data(
