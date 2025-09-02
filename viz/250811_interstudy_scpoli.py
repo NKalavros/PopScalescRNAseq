@@ -119,6 +119,9 @@ def run_scpoli_interstudy(
     if scPoli is None:
         raise ImportError(f"scPoli not available: {_SCPOLI_IMPORT_ERROR}")
     _check_requirements()
+    # CRITICAL: Store reference to original adata for in-place embedding storage
+    original_adata = adata
+    
     # Align genes across all studies to avoid dimension mismatches
     print("[INFO][scPoli] Aligning genes across studies before reference building...")
     adata = _align_genes_between_studies(adata, study_key)
@@ -498,19 +501,19 @@ def run_scpoli_interstudy(
     # Assemble full embedding matrix in combined order
     try:
         dim = ref_latent.shape[1]
-        full_mat = np.zeros((adata.n_obs, dim), dtype=np.float32)
+        full_mat = np.zeros((original_adata.n_obs, dim), dtype=np.float32)
         # Reference cells
         ref_map = {cid: row.astype(np.float32, copy=False) for cid, row in zip(ref_adata.obs_names, ref_latent)}
         missing = 0
         preds_series = []
         uncert_series = []
-        for cid in adata.obs_names:
+        for cid in original_adata.obs_names:
             if cid in ref_map:
-                full_mat[adata.obs_names.get_loc(cid)] = ref_map[cid]
+                full_mat[original_adata.obs_names.get_loc(cid)] = ref_map[cid]
                 preds_series.append(None)
                 uncert_series.append(None)
             elif cid in query_latents:
-                full_mat[adata.obs_names.get_loc(cid)] = query_latents[cid]
+                full_mat[original_adata.obs_names.get_loc(cid)] = query_latents[cid]
                 preds_series.append(query_preds.get(cid))
                 uncert_series.append(query_uncerts.get(cid))
             else:
@@ -519,9 +522,9 @@ def run_scpoli_interstudy(
                 uncert_series.append(None)
         if missing:
             print(f"[WARN][scPoli] Missing latent for {missing} cells (likely not processed)")
-        adata.obsm[embedding_key] = full_mat
-        adata.obs[f"{cell_type_key}{pred_suffix}"] = preds_series
-        adata.obs[f"{cell_type_key}{uncert_suffix}"] = uncert_series
+        original_adata.obsm[embedding_key] = full_mat
+        original_adata.obs[f"{cell_type_key}{pred_suffix}"] = preds_series
+        original_adata.obs[f"{cell_type_key}{uncert_suffix}"] = uncert_series
         print(f"[INFO][scPoli] Stored scPoli latent embedding in obsm['{embedding_key}'] shape {full_mat.shape}")
     except Exception as e:  # pragma: no cover
         print(f"[WARN][scPoli] Failed to attach scPoli embedding: {e}")
