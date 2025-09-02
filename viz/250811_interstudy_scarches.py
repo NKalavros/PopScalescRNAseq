@@ -351,14 +351,16 @@ def run_scarches_interstudy(
                 # 2. Add small noise to prevent zero standard deviations (the root cause of divide-by-zero)
                 print(f"[DEBUG][scArches] Adding minimal noise to prevent zero standard deviations")
                 noise_scale = 1e-8  # Extremely small noise that won't affect results but prevents zero std
-                q_emb_adata.X += np.random.RandomState(seed+study_name.__hash__()).normal(0, noise_scale, q_emb_adata.X.shape).astype(np.float32)
+                # Ensure seed is within valid range [0, 2**32-1]
+                query_seed = abs(hash(study_name)) % (2**32 - 1)
+                q_emb_adata.X += np.random.RandomState(query_seed).normal(0, noise_scale, q_emb_adata.X.shape).astype(np.float32)
                 
                 # 3. Ensure no zero standard deviation columns
                 stds = np.std(q_emb_adata.X, axis=0)
                 zero_std_cols = stds < 1e-10
                 if np.any(zero_std_cols):
                     print(f"[WARN][scArches] Found {np.sum(zero_std_cols)} columns with near-zero std, adding noise")
-                    q_emb_adata.X[:, zero_std_cols] += np.random.RandomState(seed+study_name.__hash__()+1).normal(0, 1e-6, (q_emb_adata.X.shape[0], np.sum(zero_std_cols))).astype(np.float32)
+                    q_emb_adata.X[:, zero_std_cols] += np.random.RandomState(query_seed+1).normal(0, 1e-6, (q_emb_adata.X.shape[0], np.sum(zero_std_cols))).astype(np.float32)
                 
                 # 4. Normalize to reasonable range to prevent numerical overflow (using same scale as reference)
                 print(f"[DEBUG][scArches] Normalizing query embedding to prevent numerical overflow")
