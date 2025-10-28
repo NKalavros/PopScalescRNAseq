@@ -18,7 +18,8 @@ Features
 Usage
 =====
 Download all data and metadata:
-    python download_lung_atlas.py --output-dir ./LungAtlas --download-all
+    cd /gpfs/scratch/nk4167/PopScalescRNAseq/datasets/3CA_Lung
+    python download_lung_atlas.py --output-dir /gpfs/scratch/nk4167/LungAtlas --download-all
 
 Download specific studies:
     python download_lung_atlas.py --output-dir ./LungAtlas --studies Bischoff2021 Maynard2020
