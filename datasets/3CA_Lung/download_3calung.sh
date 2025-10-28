@@ -1,0 +1,1 @@
+python download_lung_atlas.py --output-dir ./LungAtlas --download-all
