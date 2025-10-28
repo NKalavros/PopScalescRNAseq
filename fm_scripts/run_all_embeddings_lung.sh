@@ -3,8 +3,9 @@
 # Uses standard (non-Helical) embedding generation scripts
 # Requires A100 GPUs for optimal performance
 
-# Define studies to process
-studies=("Laughney2020" "Maynard2020" "Song2019" "Xing2021" "Zilionis2019")
+# Define studies to process (only those with successfully converted h5ad files)
+# Failed conversions: Ireland2020, Qian2020
+studies=("Bischoff2021" "Chan2021" "Guo2018" "Kim2020" "Laughney2020" "Maynard2020" "Song2019" "Xing2021" "Zilionis2019")
 
 # scGPT embeddings
 conda activate /gpfs/scratch/nk4167/miniconda/envs/scgpt_env
