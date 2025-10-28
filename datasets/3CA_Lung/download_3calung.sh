@@ -1,1 +1,1 @@
-python download_lung_atlas.py --output-dir ./LungAtlas --download-all
+python download_lung_atlas.py --output-dir /gpfs/scratch/nk4167/LungAtlas --download-all
