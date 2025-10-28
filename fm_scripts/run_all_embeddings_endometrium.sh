@@ -15,8 +15,6 @@ mkdir -p embeddings
 if [ ! -f "embeddings/scgpt.h5ad" ]; then
     python /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/scgpt_embeddings.py  --input data_nuclei.h5ad --output embeddings/scgpt.h5ad
 fi
-
-
 # Geneformer embeddings
 conda activate /gpfs/scratch/nk4167/miniconda/envs/geneformer_env
 cd /gpfs/scratch/nk4167/EndometriumAtlas/HECA_cells
