@@ -61,7 +61,7 @@ for dir in */ ; do
     mkdir -p embeddings
     # Check if the embeddings file already exists
     if [ ! -f "embeddings/transcriptformer.h5ad" ]; then
-        bash /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/run_transcriptformer.sh
+        bash /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/run_transcriptformer.sh data.h5ad
     fi
     cd ..
 done

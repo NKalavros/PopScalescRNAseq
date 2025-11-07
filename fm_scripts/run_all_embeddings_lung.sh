@@ -71,6 +71,6 @@ for study in "${studies[@]}"; do
     cd /gpfs/scratch/nk4167/LungAtlas/$study
     mkdir -p embeddings
     if [ ! -f "embeddings/transcriptformer.h5ad" ]; then
-        bash /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/run_transcriptformer.sh
+        bash /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/run_transcriptformer.sh data.h5ad
     fi
 done

@@ -81,11 +81,11 @@ source ~/.bashrc
 cd /gpfs/scratch/nk4167/EndometriumAtlas/HECA_cells
 mkdir -p embeddings
 if [ ! -f "embeddings/transcriptformer.h5ad" ]; then
-    bash /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/run_transcriptformer.sh
+    bash /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/run_transcriptformer.sh data_cells.h5ad
 fi
 source ~/.bashrc
 cd /gpfs/scratch/nk4167/EndometriumAtlas/HECA_nuclei
 mkdir -p embeddings
 if [ ! -f "embeddings/transcriptformer.h5ad" ]; then
-    bash /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/run_transcriptformer.sh
+    bash /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/run_transcriptformer.sh data_nuclei.h5ad
 fi

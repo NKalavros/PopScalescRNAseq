@@ -1,9 +1,20 @@
+#!/bin/bash
+set -euo pipefail
 
-python -c "
+DATA_FILE="${1:-data.h5ad}"
+PROCESSED_FILE="data_with_ensembl.h5ad"
+
+if [ ! -f "$DATA_FILE" ]; then
+    echo "Input AnnData file '$DATA_FILE' not found in $(pwd)" >&2
+    exit 1
+fi
+
+python - "$DATA_FILE" "$PROCESSED_FILE" <<'PYCODE'
 import sys
 import mygene
 import anndata as ad
-adata_path = sys.argv[1] if len(sys.argv) > 1 else 'data.h5ad'
+
+adata_path, output_path = sys.argv[1:3]
 adata = ad.read_h5ad(adata_path)
 mg = mygene.MyGeneInfo()
 
@@ -28,12 +39,12 @@ for item in result:
 adata.var['ensembl_id'] = [ensembl_mapping.get(gene, None) for gene in adata.var_names]
 adata.var_names_make_unique()  # Ensure unique var_names
 adata.obs['index'] = adata.obs_names.astype(str)  # Ensure obs_names are strings
-adata.write_h5ad('data_with_ensembl.h5ad')"
-
+adata.write_h5ad(output_path)
+PYCODE
 
 transcriptformer inference \
   --checkpoint-path /gpfs/scratch/nk4167/checkpoints/tf_sapiens \
-  --data-file  data_with_ensembl.h5ad \
+  --data-file "$PROCESSED_FILE" \
   --output-path ./embeddings \
   --batch-size 16 \
   --remove-duplicate-genes

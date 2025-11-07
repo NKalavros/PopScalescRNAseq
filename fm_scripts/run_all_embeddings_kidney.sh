@@ -180,35 +180,35 @@ fi
 cd /gpfs/scratch/nk4167/KidneyAtlas/lake_scrna
 mkdir -p embeddings
 if [ ! -f "embeddings/transcriptformer.h5ad" ]; then
-    bash /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/run_transcriptformer.sh
+    bash /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/run_transcriptformer.sh data.h5ad
 fi
 
 cd /gpfs/scratch/nk4167/KidneyAtlas/lake_snrna
 mkdir -p embeddings
 if [ ! -f "embeddings/transcriptformer.h5ad" ]; then
-    bash /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/run_transcriptformer.sh
+    bash /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/run_transcriptformer.sh data.h5ad
 fi
 
 cd /gpfs/scratch/nk4167/KidneyAtlas/Abedini
 mkdir -p embeddings
 if [ ! -f "embeddings/transcriptformer.h5ad" ]; then
-    bash /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/run_transcriptformer.sh
+    bash /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/run_transcriptformer.sh data.h5ad
 fi
 
 cd /gpfs/scratch/nk4167/KidneyAtlas/SCP1288
 mkdir -p embeddings
 if [ ! -f "embeddings/transcriptformer.h5ad" ]; then
-    bash /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/run_transcriptformer.sh
+    bash /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/run_transcriptformer.sh data.h5ad
 fi
 
 cd /gpfs/scratch/nk4167/KidneyAtlas/Krishna
 mkdir -p embeddings
 if [ ! -f "embeddings/transcriptformer.h5ad" ]; then
-    bash /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/run_transcriptformer.sh
+    bash /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/run_transcriptformer.sh data.h5ad
 fi
 
 cd /gpfs/scratch/nk4167/KidneyAtlas/Braun
 mkdir -p embeddings
 if [ ! -f "embeddings/transcriptformer.h5ad" ]; then
-    bash /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/run_transcriptformer.sh
+    bash /gpfs/scratch/nk4167/PopScalescRNAseq/fm_scripts/run_transcriptformer.sh data.h5ad
 fi
