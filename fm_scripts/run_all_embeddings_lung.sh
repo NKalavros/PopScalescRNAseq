@@ -66,6 +66,7 @@ done
 
 
 # TranscriptFormer embeddings
+source ~/.bashrc
 for study in "${studies[@]}"; do
     cd /gpfs/scratch/nk4167/LungAtlas/$study
     mkdir -p embeddings
